@@ -100,7 +100,8 @@ private:
     if (const auto *block = dynamic_cast<const ast::BlockStmt *>(&stmt)) {
       const int block_line = block->location.line;
       for (const auto &s : block->statements) {
-        if (!s) continue;
+        if (!s)
+          continue;
         visit_stmt(*s, block_line);
       }
     } else if (const auto *var = dynamic_cast<const ast::VarDeclStmt *>(&stmt)) {
@@ -113,13 +114,18 @@ private:
       sym.scope_end_line = 999999;
       table_.symbols.push_back(std::move(sym));
     } else if (const auto *if_s = dynamic_cast<const ast::IfStmt *>(&stmt)) {
-      if (if_s->then_branch) visit_stmt(*if_s->then_branch, scope_start);
-      if (if_s->else_branch) visit_stmt(*if_s->else_branch, scope_start);
+      if (if_s->then_branch)
+        visit_stmt(*if_s->then_branch, scope_start);
+      if (if_s->else_branch)
+        visit_stmt(*if_s->else_branch, scope_start);
     } else if (const auto *while_s = dynamic_cast<const ast::WhileStmt *>(&stmt)) {
-      if (while_s->body) visit_stmt(*while_s->body, scope_start);
+      if (while_s->body)
+        visit_stmt(*while_s->body, scope_start);
     } else if (const auto *for_s = dynamic_cast<const ast::ForStmt *>(&stmt)) {
-      if (for_s->init) visit_stmt(*for_s->init, scope_start);
-      if (for_s->body) visit_stmt(*for_s->body, scope_start);
+      if (for_s->init)
+        visit_stmt(*for_s->init, scope_start);
+      if (for_s->body)
+        visit_stmt(*for_s->body, scope_start);
     }
   }
 
@@ -162,12 +168,14 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
   bool has_lexer_error = false;
   for (const auto &token : tokens) {
     if (token.type == TokenType::ERROR) {
-      result.diagnostics.push_back({token.line, token.column, static_cast<int>(token.lexeme.size()), std::string(token.lexeme), 1});
+      result.diagnostics.push_back({token.line, token.column, static_cast<int>(token.lexeme.size()),
+                                    std::string(token.lexeme), 1});
       has_lexer_error = true;
     }
   }
 
-  if (has_lexer_error) return result;
+  if (has_lexer_error)
+    return result;
 
   Parser parser(tokens);
   auto parse_result = parser.parse();
@@ -186,9 +194,8 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         }
       }
       if (const auto *imp = dynamic_cast<const ast::ImportDecl *>(decl.get())) {
-        std::string ns = imp->alias.empty()
-            ? std::filesystem::path(imp->path).stem().string()
-            : imp->alias;
+        std::string ns =
+            imp->alias.empty() ? std::filesystem::path(imp->path).stem().string() : imp->alias;
         result.imported_namespaces.insert(ns);
       }
       if (const auto *imp = dynamic_cast<const ast::LogicalImportDecl *>(decl.get())) {
@@ -209,7 +216,8 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
     // the project root when the LSP client opens files by absolute URI).
     std::error_code ec;
     std::filesystem::path abs_p = std::filesystem::absolute(p, ec);
-    if (ec) abs_p = p;
+    if (ec)
+      abs_p = p;
     std::string base_dir = abs_p.has_parent_path() ? abs_p.parent_path().string() : ".";
     module_loader = std::make_unique<ModuleLoader>(base_dir);
     module_loader->discover_project_root(base_dir);
@@ -227,14 +235,11 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
   if (module_loader && parse_result.program) {
     // Populate result.imported_symbols[ns] from a freshly-loaded module.
     // Filters honor selected_symbols when supplied (legacy form only).
-    auto ingest = [&](const ModuleLoader::LoadResult &load_result,
-                      const ast::Decl &decl_for_loc, const std::string &ns,
-                      const std::vector<std::string> &selected_symbols) {
+    auto ingest = [&](const ModuleLoader::LoadResult &load_result, const ast::Decl &decl_for_loc,
+                      const std::string &ns, const std::vector<std::string> &selected_symbols) {
       if (!load_result.module) {
-        result.diagnostics.push_back({
-            decl_for_loc.location.line, decl_for_loc.location.column,
-            1, load_result.error, 1
-        });
+        result.diagnostics.push_back(
+            {decl_for_loc.location.line, decl_for_loc.location.column, 1, load_result.error, 1});
         return;
       }
       const auto &mod = *load_result.module;
@@ -243,9 +248,13 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         if (!selected_symbols.empty()) {
           bool found = false;
           for (const auto &s : selected_symbols) {
-            if (s == fn->name) { found = true; break; }
+            if (s == fn->name) {
+              found = true;
+              break;
+            }
           }
-          if (!found) continue;
+          if (!found)
+            continue;
         }
         Symbol sym;
         sym.name = fn->name;
@@ -256,7 +265,8 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         syms.push_back(std::move(sym));
       }
       for (const auto *sd : mod.public_structs) {
-        if (!selected_symbols.empty()) continue;
+        if (!selected_symbols.empty())
+          continue;
         Symbol sym;
         sym.name = sd->name;
         sym.kind = SymbolKind::Struct;
@@ -268,7 +278,8 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         syms.push_back(std::move(sym));
       }
       for (const auto *ed : mod.public_enums) {
-        if (!selected_symbols.empty()) continue;
+        if (!selected_symbols.empty())
+          continue;
         Symbol sym;
         sym.name = ed->name;
         sym.kind = SymbolKind::Enum;
@@ -288,7 +299,7 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         const std::string ns =
             imp->alias.empty()
                 ? (load_result.module ? load_result.module->namespace_name
-                                       : std::filesystem::path(imp->path).stem().string())
+                                      : std::filesystem::path(imp->path).stem().string())
                 : imp->alias;
         ingest(load_result, *imp, ns, imp->selected_symbols);
         continue;
@@ -317,12 +328,13 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
   auto register_selective_bare_names = [&result](const ast::Program &program) {
     for (const auto &decl : program.declarations) {
       const auto *imp = dynamic_cast<const ast::ImportDecl *>(decl.get());
-      if (!imp || imp->selected_symbols.empty()) continue;
-      std::string ns = imp->alias.empty()
-          ? std::filesystem::path(imp->path).stem().string()
-          : imp->alias;
+      if (!imp || imp->selected_symbols.empty())
+        continue;
+      std::string ns =
+          imp->alias.empty() ? std::filesystem::path(imp->path).stem().string() : imp->alias;
       auto it = result.imported_symbols.find(ns);
-      if (it == result.imported_symbols.end()) continue;
+      if (it == result.imported_symbols.end())
+        continue;
       for (auto sym : it->second) {
         sym.scope_start_line = 0;
         sym.scope_end_line = 999999;
@@ -343,10 +355,12 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
   }
 
   TypeChecker checker;
-  if (module_loader) checker.set_module_loader(module_loader.get());
+  if (module_loader)
+    checker.set_module_loader(module_loader.get());
   auto type_result = checker.check(*parse_result.program);
   for (const auto &err : type_result.errors) {
-    result.diagnostics.push_back({err.location.line, err.location.column, err.location.length, err.message, static_cast<int>(err.severity)});
+    result.diagnostics.push_back({err.location.line, err.location.column, err.location.length,
+                                  err.message, static_cast<int>(err.severity)});
   }
 
   SymbolCollector collector;

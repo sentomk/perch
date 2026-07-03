@@ -67,8 +67,8 @@ void test_format_project_config(const std::filesystem::path &cases) {
   const std::string input = read_file(case_dir / "input.kl");
   const std::string expected = read_file(case_dir / "expected.kl");
 
-  const kinglet::lsp::FormatDocumentResult result = kinglet::lsp::format_document_text(
-      (case_dir / "input.kl").string(), input);
+  const kinglet::lsp::FormatDocumentResult result =
+      kinglet::lsp::format_document_text((case_dir / "input.kl").string(), input);
   CHECK(result.error.empty());
   CHECK(result.formatted == expected);
 }

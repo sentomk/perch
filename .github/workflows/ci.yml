@@ -1,19 +1,172 @@
-name: ci
+name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  # ── commit-style ────────────────────────────────────────────────────────────
+  commit-style:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        shell: bash
+        run: |
+          set -euo pipefail
+          # In a PR, HEAD is the merge commit produced by actions/checkout.
+          # HEAD^1 is the base (main), HEAD^2 is the PR head.
+          # On a push to main, there's one parent.
+          if git rev-parse HEAD^2 >/dev/null 2>&1; then
+            RANGE="HEAD^1..HEAD^2"
+          else
+            RANGE="HEAD^1..HEAD"
+          fi
+          for sha in $(git log --format="%H" "$RANGE"); do
+            git log -1 --format="%B" "$sha" > /tmp/commit-msg
+            python3 scripts/hooks/check_commit_msg.py /tmp/commit-msg
+          done
+
+  # ── clang-format ────────────────────────────────────────────────────────────
+  clang-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format-19
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-format-19
+
+      - name: Check formatting
+        run: |
+          find server -name '*.cc' -o -name '*.h' \
+            | xargs clang-format-19 --dry-run --Werror
+
+  # ── clang-tidy ──────────────────────────────────────────────────────────────
+  clang-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang clang-tidy ninja-build
+
+      - name: Install GN
+        run: |
+          curl -fsSL -o /tmp/gn.zip \
+            https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest
+          sudo unzip -d /usr/local/bin /tmp/gn.zip gn
+          sudo chmod +x /usr/local/bin/gn
+          rm /tmp/gn.zip
+
+      - name: Setup bootstrap symlinks
+        run: bash scripts/setup-deps.sh
+
+      - name: Generate compile_commands.json
+        run: gn gen out/lint --export-compile-commands --args='is_debug=false'
+
+      - name: Run clang-tidy
+        run: |
+          find server -name '*.cc' \
+            | xargs -P"$(nproc)" -I{} clang-tidy {} -p out/lint --quiet
+
+  # ── build-and-test (Unix) ───────────────────────────────────────────────────
+  build-and-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install build tools
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
+            curl -fsSL -o /tmp/gn.zip \
+              https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest
+            sudo unzip -d /usr/local/bin /tmp/gn.zip gn
+            sudo chmod +x /usr/local/bin/gn
+            rm /tmp/gn.zip
+          else
+            brew install ninja
+            curl -fsSL -o /tmp/gn.zip \
+              https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/latest
+            sudo unzip -d /usr/local/bin /tmp/gn.zip gn
+            sudo chmod +x /usr/local/bin/gn
+            rm /tmp/gn.zip
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-      - run: npm ci
-      - run: npm run compile
+
+      - name: Setup bootstrap symlinks
+        shell: bash
+        run: bash scripts/setup-deps.sh
+
+      - name: Build C++ server
+        shell: bash
+        run: |
+          gn gen out/Default --args='is_debug=false'
+          ninja -C out/Default kinglet-lsp formatting_test
+
+      - name: Run C++ tests
+        shell: bash
+        run: out/Default/formatting_test
+
+      - name: Build VS Code extension
+        shell: bash
+        run: |
+          npm ci
+          npm run compile
+
+  # ── build-and-test (Windows) ────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install build tools
+        shell: pwsh
+        run: |
+          choco install -y ninja --no-progress
+          Invoke-WebRequest -Uri "https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/latest" -OutFile "$env:RUNNER_TEMP\gn.zip"
+          Expand-Archive "$env:RUNNER_TEMP\gn.zip" -DestinationPath "$env:RUNNER_TEMP"
+          Add-Content $env:GITHUB_PATH "$env:RUNNER_TEMP"
+
+      - name: Setup bootstrap symlinks
+        shell: pwsh
+        run: ./scripts/setup-deps.ps1
+
+      - name: Build C++ server
+        shell: pwsh
+        run: |
+          gn gen out/Default --args='is_debug=false'
+          ninja -C out/Default kinglet-lsp formatting_test
+
+      - name: Run C++ tests
+        shell: pwsh
+        run: ./out/Default/formatting_test.exe

@@ -16,14 +16,14 @@ constexpr int kSeverityWarning = 2;
 const std::unordered_set<std::string> kKnownBlocks = {"modules", "targets", "build", "fmt"};
 const std::unordered_set<std::string> kBuildKeys = {"default", "backend", "out", "cache"};
 const std::unordered_set<std::string> kFmtKeys = {"indent", "max_width", "newline",
-                                                   "trailing_comma", "extensions"};
+                                                  "trailing_comma", "extensions"};
 const std::unordered_set<std::string> kFmtExtensions = {"align-imports", "group-using",
-                                                         "align-struct-fields"};
+                                                        "align-struct-fields"};
 
 struct LineView {
   std::string text;
-  int line;       // 1-based
-  int start_col;  // 1-based column of `text[0]` in the original source
+  int line;      // 1-based
+  int start_col; // 1-based column of `text[0]` in the original source
 };
 
 // Split `source` into LineView entries — preserves trailing whitespace per
@@ -38,8 +38,9 @@ std::vector<LineView> split_lines(const std::string &source) {
       ++i;
     }
     out.push_back({source.substr(start, i - start), line, 1});
-    if (i == source.size()) break;
-    ++i;  // skip '\n'
+    if (i == source.size())
+      break;
+    ++i; // skip '\n'
     ++line;
   }
   return out;
@@ -68,7 +69,8 @@ std::string strip_comment(const std::string &line) {
     const char c = line[i];
     if (c == '"') {
       // crude escape handling: \" stays in string
-      if (i > 0 && line[i - 1] == '\\') continue;
+      if (i > 0 && line[i - 1] == '\\')
+        continue;
       in_string = !in_string;
     } else if (c == '#' && !in_string) {
       return line.substr(0, i);
@@ -79,7 +81,7 @@ std::string strip_comment(const std::string &line) {
 
 struct Token {
   std::string text;
-  int col;  // 1-based
+  int col; // 1-based
 };
 
 // Tokenize a single (non-comment, non-blank) line into a small sequence:
@@ -124,10 +126,14 @@ std::vector<Token> tokenize_line(const std::string &line, int start_col) {
       int depth = 0;
       while (i < line.size()) {
         buf.push_back(line[i]);
-        if (line[i] == '[') ++depth;
+        if (line[i] == '[')
+          ++depth;
         else if (line[i] == ']') {
           --depth;
-          if (depth == 0) { ++i; break; }
+          if (depth == 0) {
+            ++i;
+            break;
+          }
         }
         ++i;
       }
@@ -143,9 +149,8 @@ std::vector<Token> tokenize_line(const std::string &line, int start_col) {
     if (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.' || c == '-') {
       const int col = start_col + static_cast<int>(i);
       std::string buf;
-      while (i < line.size() &&
-             (std::isalnum(static_cast<unsigned char>(line[i])) || line[i] == '_' ||
-              line[i] == '.' || line[i] == '-')) {
+      while (i < line.size() && (std::isalnum(static_cast<unsigned char>(line[i])) ||
+                                 line[i] == '_' || line[i] == '.' || line[i] == '-')) {
         buf.push_back(line[i]);
         ++i;
       }
@@ -168,15 +173,17 @@ std::string unquote(const std::string &t) {
 }
 
 bool is_integer_literal(const std::string &s) {
-  if (s.empty()) return false;
+  if (s.empty())
+    return false;
   for (char c : s) {
-    if (!std::isdigit(static_cast<unsigned char>(c))) return false;
+    if (!std::isdigit(static_cast<unsigned char>(c)))
+      return false;
   }
   return true;
 }
 
-void push_diag(AnalysisResult &out, int line, int col, int length,
-               std::string message, int severity) {
+void push_diag(AnalysisResult &out, int line, int col, int length, std::string message,
+               int severity) {
   Diagnostic d;
   d.line = line;
   d.col = col;
@@ -194,7 +201,8 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
   std::filesystem::path manifest_path(file_path);
   std::error_code ec;
   std::filesystem::path manifest_abs = std::filesystem::absolute(manifest_path, ec);
-  if (ec) manifest_abs = manifest_path;
+  if (ec)
+    manifest_abs = manifest_path;
   const std::filesystem::path project_root =
       manifest_abs.has_parent_path() ? manifest_abs.parent_path() : std::filesystem::path(".");
 
@@ -202,9 +210,9 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
 
   // First pass: collect modules { } and targets { } tables so we can
   // cross-reference binary entries and build.default in the second pass.
-  std::unordered_map<std::string, int> modules;  // name -> declared line
-  std::unordered_map<std::string, std::string> module_paths;  // name -> rel path
-  std::unordered_set<std::string> targets;  // declared target names
+  std::unordered_map<std::string, int> modules;              // name -> declared line
+  std::unordered_map<std::string, std::string> module_paths; // name -> rel path
+  std::unordered_set<std::string> targets;                   // declared target names
   std::set<std::string> reported_dup_modules;
 
   // We track block context across lines via a simple state machine.
@@ -223,7 +231,8 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
     int col = lv.start_col;
     ltrim(raw, col);
     rtrim(raw);
-    if (raw.empty()) continue;
+    if (raw.empty())
+      continue;
 
     // Block-close marker (alone on a line) ends the block.
     if (raw == "}") {
@@ -233,7 +242,8 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
     }
 
     auto tokens = tokenize_line(raw, col);
-    if (tokens.empty()) continue;
+    if (tokens.empty())
+      continue;
 
     // Block headers like `modules {` or `fmt {`.
     if (block.empty()) {
@@ -244,8 +254,7 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
           continue;
         }
         if (!kKnownBlocks.count(header)) {
-          push_diag(out, lv.line, tokens.front().col,
-                    static_cast<int>(header.size()),
+          push_diag(out, lv.line, tokens.front().col, static_cast<int>(header.size()),
                     "unknown block '" + header + "'; expected modules, targets, build, or fmt",
                     kSeverityWarning);
         }
@@ -259,10 +268,8 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
         continue;
       }
       // Anything else at top level is suspicious.
-      push_diag(out, lv.line, tokens.front().col,
-                static_cast<int>(tokens.front().text.size()),
-                "unexpected top-level token '" + tokens.front().text + "'",
-                kSeverityWarning);
+      push_diag(out, lv.line, tokens.front().col, static_cast<int>(tokens.front().text.size()),
+                "unexpected top-level token '" + tokens.front().text + "'", kSeverityWarning);
       continue;
     }
 
@@ -278,10 +285,8 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
 
     // Block body: lines look like `key = value [value ...]`.
     if (tokens.size() < 3 || tokens[1].text != "=") {
-      push_diag(out, lv.line, tokens.front().col,
-                static_cast<int>(tokens.front().text.size()),
-                "expected `key = value` inside " + block + " { ... }",
-                kSeverityWarning);
+      push_diag(out, lv.line, tokens.front().col, static_cast<int>(tokens.front().text.size()),
+                "expected `key = value` inside " + block + " { ... }", kSeverityWarning);
       continue;
     }
     const Token &key = tokens[0];
@@ -290,15 +295,14 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
 
     if (!block_keys.insert(key.text).second) {
       push_diag(out, lv.line, key.col, static_cast<int>(key.text.size()),
-                "duplicate key '" + key.text + "' in " + block + " block",
-                kSeverityWarning);
+                "duplicate key '" + key.text + "' in " + block + " block", kSeverityWarning);
       // Keep the latter declaration for downstream checks.
     }
 
     if (block == "modules" || block == "targets") {
       // Module/target name validity — must look like a dotted identifier.
-      bool legal = !key.text.empty() && (std::isalpha(static_cast<unsigned char>(key.text[0])) ||
-                                          key.text[0] == '_');
+      bool legal = !key.text.empty() &&
+                   (std::isalpha(static_cast<unsigned char>(key.text[0])) || key.text[0] == '_');
       for (std::size_t i = 1; legal && i < key.text.size(); ++i) {
         const char c = key.text[i];
         if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.')) {
@@ -314,16 +318,14 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
     if (block == "modules") {
       // Right-hand side should be a single quoted path.
       if (tokens.size() != 3 || tokens[2].text.empty() || tokens[2].text.front() != '"') {
-        push_diag(out, lv.line, tokens[2].col,
-                  static_cast<int>(tokens[2].text.size()),
+        push_diag(out, lv.line, tokens[2].col, static_cast<int>(tokens[2].text.size()),
                   "modules entries take a single quoted path, e.g. \"lib/foo.kl\"",
                   kSeverityWarning);
       } else {
         const std::string rel = unquote(tokens[2].text);
         const std::filesystem::path candidate = project_root / rel;
         if (!std::filesystem::exists(candidate, ec)) {
-          push_diag(out, lv.line, tokens[2].col,
-                    static_cast<int>(tokens[2].text.size()),
+          push_diag(out, lv.line, tokens[2].col, static_cast<int>(tokens[2].text.size()),
                     "module file '" + rel + "' does not exist under the project root",
                     kSeverityWarning);
         }
@@ -336,8 +338,7 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
     if (block == "build") {
       if (!kBuildKeys.count(key.text)) {
         push_diag(out, lv.line, key.col, static_cast<int>(key.text.size()),
-                  "unknown build key '" + key.text +
-                      "'; expected default, backend, out, or cache",
+                  "unknown build key '" + key.text + "'; expected default, backend, out, or cache",
                   kSeverityWarning);
         continue;
       }
@@ -378,10 +379,12 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
           std::string item;
           int item_col = cursor;
           auto flush = [&]() {
-            if (item.empty()) return;
+            if (item.empty())
+              return;
             std::string trimmed;
             for (char c : item) {
-              if (c != ' ' && c != '\t') trimmed.push_back(c);
+              if (c != ' ' && c != '\t')
+                trimmed.push_back(c);
             }
             if (!trimmed.empty()) {
               if (trimmed.size() >= 2 && trimmed.front() == '"' && trimmed.back() == '"') {
@@ -392,15 +395,20 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
             item.clear();
           };
           for (char c : body) {
-            if (c == ',') { flush(); item_col = cursor + 1; }
-            else { if (item.empty()) item_col = cursor; item.push_back(c); }
+            if (c == ',') {
+              flush();
+              item_col = cursor + 1;
+            } else {
+              if (item.empty())
+                item_col = cursor;
+              item.push_back(c);
+            }
             ++cursor;
           }
           flush();
         } else {
           push_diag(out, lv.line, tokens[2].col, static_cast<int>(v.size()),
-                    "fmt.extensions expects a quoted name or a [list]",
-                    kSeverityWarning);
+                    "fmt.extensions expects a quoted name or a [list]", kSeverityWarning);
         }
         for (const auto &[name, name_col] : items) {
           if (!kFmtExtensions.count(name)) {
@@ -420,8 +428,7 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
       if (t0 == "binary") {
         targets.insert(key.text);
         if (tokens.size() < 4 || tokens[3].text.empty() || tokens[3].text.front() != '"') {
-          push_diag(out, lv.line, tokens[2].col,
-                    static_cast<int>(tokens[2].text.size()),
+          push_diag(out, lv.line, tokens[2].col, static_cast<int>(tokens[2].text.size()),
                     "binary target requires a quoted entry module name, e.g. binary \"app\"",
                     kSeverityWarning);
         } else {
@@ -433,16 +440,14 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
         targets.insert(key.text);
         // OK.
       } else {
-        push_diag(out, lv.line, tokens[2].col,
-                  static_cast<int>(t0.size()),
+        push_diag(out, lv.line, tokens[2].col, static_cast<int>(t0.size()),
                   "expected `binary \"name\"` or `library`", kSeverityWarning);
       }
       continue;
     }
   }
   if (!block.empty() && block.front() != '?') {
-    push_diag(out, block_open_line, 1, 1,
-              "unterminated " + block + " { ... } block",
+    push_diag(out, block_open_line, 1, 1, "unterminated " + block + " { ... } block",
               kSeverityWarning);
   }
 
@@ -453,30 +458,39 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
     int col = lv.start_col;
     ltrim(raw, col);
     rtrim(raw);
-    if (raw.empty()) continue;
+    if (raw.empty())
+      continue;
     auto tokens = tokenize_line(raw, col);
-    if (tokens.empty()) continue;
-    if (raw == "}") { block.clear(); continue; }
+    if (tokens.empty())
+      continue;
+    if (raw == "}") {
+      block.clear();
+      continue;
+    }
     if (block.empty()) {
       if (tokens.size() >= 2 && tokens.back().text == "{") {
         const std::string header = tokens.front().text;
-        if (kKnownBlocks.count(header)) block = header; else block = "?" + header;
+        if (kKnownBlocks.count(header))
+          block = header;
+        else
+          block = "?" + header;
       }
       continue;
     }
     if (!block.empty() && block.front() == '?') {
-      if (tokens.size() == 1 && tokens.front().text == "}") block.clear();
+      if (tokens.size() == 1 && tokens.front().text == "}")
+        block.clear();
       continue;
     }
-    if (tokens.size() < 3 || tokens[1].text != "=") continue;
+    if (tokens.size() < 3 || tokens[1].text != "=")
+      continue;
 
     if (block == "build" && tokens[0].text == "default") {
       if (tokens[2].text.front() == '"') {
         const std::string name = unquote(tokens[2].text);
         // build.default references a target, not a module.
         if (!name.empty() && !targets.count(name)) {
-          push_diag(out, lv.line, tokens[2].col,
-                    static_cast<int>(tokens[2].text.size()),
+          push_diag(out, lv.line, tokens[2].col, static_cast<int>(tokens[2].text.size()),
                     "build.default '" + name + "' is not declared in targets { ... }",
                     kSeverityWarning);
         }
@@ -485,8 +499,7 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
       if (tokens[3].text.front() == '"') {
         const std::string mod = unquote(tokens[3].text);
         if (!mod.empty() && !modules.count(mod)) {
-          push_diag(out, lv.line, tokens[3].col,
-                    static_cast<int>(tokens[3].text.size()),
+          push_diag(out, lv.line, tokens[3].col, static_cast<int>(tokens[3].text.size()),
                     "binary target references module '" + mod +
                         "' which is not declared in modules { ... }",
                     kSeverityWarning);

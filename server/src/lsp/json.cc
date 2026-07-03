@@ -42,15 +42,20 @@ void append_utf8(std::string &out, std::uint32_t cp) {
 // Read exactly four hex digits at `pos` and advance. Returns -1 on failure
 // (e.g. malformed input).
 int parse_hex4(std::string_view input, std::size_t &pos) {
-  if (pos + 4 > input.size()) return -1;
+  if (pos + 4 > input.size())
+    return -1;
   int value = 0;
   for (int i = 0; i < 4; ++i) {
     const char c = input[pos + static_cast<std::size_t>(i)];
     int digit;
-    if (c >= '0' && c <= '9') digit = c - '0';
-    else if (c >= 'a' && c <= 'f') digit = 10 + (c - 'a');
-    else if (c >= 'A' && c <= 'F') digit = 10 + (c - 'A');
-    else return -1;
+    if (c >= '0' && c <= '9')
+      digit = c - '0';
+    else if (c >= 'a' && c <= 'f')
+      digit = 10 + (c - 'a');
+    else if (c >= 'A' && c <= 'F')
+      digit = 10 + (c - 'A');
+    else
+      return -1;
     value = (value << 4) | digit;
   }
   pos += 4;
@@ -67,22 +72,47 @@ std::string parse_string(std::string_view input, std::size_t &pos) {
     if (input[pos] == '\\' && pos + 1 < input.size()) {
       ++pos;
       switch (input[pos]) {
-      case 'n': result += '\n'; ++pos; break;
-      case 't': result += '\t'; ++pos; break;
-      case 'r': result += '\r'; ++pos; break;
-      case 'b': result += '\b'; ++pos; break;
-      case 'f': result += '\f'; ++pos; break;
-      case '/': result += '/'; ++pos; break;
-      case '\\': result += '\\'; ++pos; break;
-      case '"': result += '"'; ++pos; break;
+      case 'n':
+        result += '\n';
+        ++pos;
+        break;
+      case 't':
+        result += '\t';
+        ++pos;
+        break;
+      case 'r':
+        result += '\r';
+        ++pos;
+        break;
+      case 'b':
+        result += '\b';
+        ++pos;
+        break;
+      case 'f':
+        result += '\f';
+        ++pos;
+        break;
+      case '/':
+        result += '/';
+        ++pos;
+        break;
+      case '\\':
+        result += '\\';
+        ++pos;
+        break;
+      case '"':
+        result += '"';
+        ++pos;
+        break;
       case 'u': {
         ++pos; // skip 'u'
         const int hi = parse_hex4(input, pos);
-        if (hi < 0) break;
+        if (hi < 0)
+          break;
         std::uint32_t cp = static_cast<std::uint32_t>(hi);
         // High surrogate? Look for the matching low surrogate.
-        if (cp >= 0xD800 && cp <= 0xDBFF && pos + 2 <= input.size() &&
-            input[pos] == '\\' && input[pos + 1] == 'u') {
+        if (cp >= 0xD800 && cp <= 0xDBFF && pos + 2 <= input.size() && input[pos] == '\\' &&
+            input[pos + 1] == 'u') {
           std::size_t saved = pos;
           pos += 2;
           const int lo = parse_hex4(input, pos);
@@ -97,29 +127,38 @@ std::string parse_string(std::string_view input, std::size_t &pos) {
         append_utf8(result, cp);
         break;
       }
-      default: result += input[pos]; ++pos; break;
+      default:
+        result += input[pos];
+        ++pos;
+        break;
       }
     } else {
       result += input[pos];
       ++pos;
     }
   }
-  if (pos < input.size()) ++pos; // skip closing "
+  if (pos < input.size())
+    ++pos; // skip closing "
   return result;
 }
 
 Number parse_number(std::string_view input, std::size_t &pos) {
   const std::size_t start = pos;
-  if (pos < input.size() && input[pos] == '-') ++pos;
-  while (pos < input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
+  if (pos < input.size() && input[pos] == '-')
+    ++pos;
+  while (pos < input.size() && std::isdigit(static_cast<unsigned char>(input[pos])))
+    ++pos;
   if (pos < input.size() && input[pos] == '.') {
     ++pos;
-    while (pos < input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
+    while (pos < input.size() && std::isdigit(static_cast<unsigned char>(input[pos])))
+      ++pos;
   }
   if (pos < input.size() && (input[pos] == 'e' || input[pos] == 'E')) {
     ++pos;
-    if (pos < input.size() && (input[pos] == '+' || input[pos] == '-')) ++pos;
-    while (pos < input.size() && std::isdigit(static_cast<unsigned char>(input[pos]))) ++pos;
+    if (pos < input.size() && (input[pos] == '+' || input[pos] == '-'))
+      ++pos;
+    while (pos < input.size() && std::isdigit(static_cast<unsigned char>(input[pos])))
+      ++pos;
   }
   const auto num_str = input.substr(start, pos - start);
   char *end = nullptr;
@@ -130,51 +169,83 @@ Value parse_value(std::string_view input, std::size_t &pos);
 
 Object parse_object(std::string_view input, std::size_t &pos) {
   Object obj;
-  if (pos >= input.size() || input[pos] != '{') return obj;
+  if (pos >= input.size() || input[pos] != '{')
+    return obj;
   ++pos;
   skip_ws(input, pos);
-  if (pos < input.size() && input[pos] == '}') { ++pos; return obj; }
+  if (pos < input.size() && input[pos] == '}') {
+    ++pos;
+    return obj;
+  }
   while (pos < input.size()) {
     skip_ws(input, pos);
     std::string key = parse_string(input, pos);
     skip_ws(input, pos);
-    if (pos < input.size() && input[pos] == ':') ++pos;
+    if (pos < input.size() && input[pos] == ':')
+      ++pos;
     skip_ws(input, pos);
     obj[key] = parse_value(input, pos);
     skip_ws(input, pos);
-    if (pos < input.size() && input[pos] == ',') { ++pos; continue; }
-    if (pos < input.size() && input[pos] == '}') { ++pos; break; }
+    if (pos < input.size() && input[pos] == ',') {
+      ++pos;
+      continue;
+    }
+    if (pos < input.size() && input[pos] == '}') {
+      ++pos;
+      break;
+    }
   }
   return obj;
 }
 
 Array parse_array(std::string_view input, std::size_t &pos) {
   Array arr;
-  if (pos >= input.size() || input[pos] != '[') return arr;
+  if (pos >= input.size() || input[pos] != '[')
+    return arr;
   ++pos;
   skip_ws(input, pos);
-  if (pos < input.size() && input[pos] == ']') { ++pos; return arr; }
+  if (pos < input.size() && input[pos] == ']') {
+    ++pos;
+    return arr;
+  }
   while (pos < input.size()) {
     skip_ws(input, pos);
     arr.push_back(parse_value(input, pos));
     skip_ws(input, pos);
-    if (pos < input.size() && input[pos] == ',') { ++pos; continue; }
-    if (pos < input.size() && input[pos] == ']') { ++pos; break; }
+    if (pos < input.size() && input[pos] == ',') {
+      ++pos;
+      continue;
+    }
+    if (pos < input.size() && input[pos] == ']') {
+      ++pos;
+      break;
+    }
   }
   return arr;
 }
 
 Value parse_value(std::string_view input, std::size_t &pos) {
   skip_ws(input, pos);
-  if (pos >= input.size()) return Value::null();
+  if (pos >= input.size())
+    return Value::null();
   switch (input[pos]) {
-  case '{': return Value{parse_object(input, pos)};
-  case '[': return Value{parse_array(input, pos)};
-  case '"': return Value{parse_string(input, pos)};
-  case 't': pos += 4; return Value{true};
-  case 'f': pos += 5; return Value{false};
-  case 'n': pos += 4; return Value::null();
-  default: return Value{parse_number(input, pos)};
+  case '{':
+    return Value{parse_object(input, pos)};
+  case '[':
+    return Value{parse_array(input, pos)};
+  case '"':
+    return Value{parse_string(input, pos)};
+  case 't':
+    pos += 4;
+    return Value{true};
+  case 'f':
+    pos += 5;
+    return Value{false};
+  case 'n':
+    pos += 4;
+    return Value::null();
+  default:
+    return Value{parse_number(input, pos)};
   }
 }
 
@@ -183,12 +254,24 @@ std::string escape_json(const std::string &s) {
   result.reserve(s.size());
   for (char c : s) {
     switch (c) {
-    case '\n': result += "\\n"; break;
-    case '\r': result += "\\r"; break;
-    case '\t': result += "\\t"; break;
-    case '\\': result += "\\\\"; break;
-    case '"': result += "\\\""; break;
-    default: result += c; break;
+    case '\n':
+      result += "\\n";
+      break;
+    case '\r':
+      result += "\\r";
+      break;
+    case '\t':
+      result += "\\t";
+      break;
+    case '\\':
+      result += "\\\\";
+      break;
+    case '"':
+      result += "\\\"";
+      break;
+    default:
+      result += c;
+      break;
     }
   }
   return result;
@@ -216,7 +299,8 @@ std::string to_string(const Value &val) {
     std::string result = "{";
     bool first = true;
     for (const auto &[k, v] : val.as_object()) {
-      if (!first) result += ",";
+      if (!first)
+        result += ",";
       first = false;
       result += "\"" + escape_json(k) + "\":" + to_string(v);
     }
@@ -227,7 +311,8 @@ std::string to_string(const Value &val) {
     std::string result = "[";
     bool first = true;
     for (const auto &v : val.as_array()) {
-      if (!first) result += ",";
+      if (!first)
+        result += ",";
       first = false;
       result += to_string(v);
     }

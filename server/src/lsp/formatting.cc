@@ -16,7 +16,8 @@ kinglet::preen::FmtConfig resolve_fmt_config(const std::string &file_path) {
   std::filesystem::path path(file_path);
   std::error_code ec;
   std::filesystem::path abs_path = std::filesystem::absolute(path, ec);
-  if (ec) abs_path = path;
+  if (ec)
+    abs_path = path;
   const std::string dir =
       abs_path.has_parent_path() ? abs_path.parent_path().string() : std::string(".");
   if (const auto project = kinglet::find_project_config(dir)) {

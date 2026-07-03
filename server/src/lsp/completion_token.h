@@ -14,7 +14,6 @@ struct CompletionTokenResult {
   std::string prefix;
 };
 
-CompletionTokenResult inject_completion_token(
-    const std::string &source, int line, int character);
+CompletionTokenResult inject_completion_token(const std::string &source, int line, int character);
 
 } // namespace kinglet::lsp

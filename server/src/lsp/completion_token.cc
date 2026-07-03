@@ -4,8 +4,7 @@
 
 namespace kinglet::lsp {
 
-CompletionTokenResult inject_completion_token(
-    const std::string &source, int line, int character) {
+CompletionTokenResult inject_completion_token(const std::string &source, int line, int character) {
   CompletionTokenResult result;
   result.source = source;
 
@@ -20,7 +19,8 @@ CompletionTokenResult inject_completion_token(
         std::size_t offset = 0;
         int cur_line = 1;
         for (; offset < source.size() && cur_line < tok.line; ++offset) {
-          if (source[offset] == '\n') ++cur_line;
+          if (source[offset] == '\n')
+            ++cur_line;
         }
         offset += static_cast<std::size_t>(tok.column - 1);
         scanner_base = tok.lexeme.data() - offset;
@@ -63,18 +63,12 @@ CompletionTokenResult inject_completion_token(
 
     int tok_end_col = tok.column + static_cast<int>(tok.lexeme.size());
 
-    if (tok.line == cursor_line && tok.column <= cursor_col &&
-        tok_end_col >= cursor_col &&
-        (tok.type == TokenType::IDENTIFIER ||
-         tok.type == TokenType::STRING ||
-         tok.type == TokenType::INT ||
-         tok.type == TokenType::FLOAT ||
-         tok.type == TokenType::DOUBLE ||
-         tok.type == TokenType::BOOL ||
-         tok.type == TokenType::VOID ||
-         tok.type == TokenType::BYTE ||
-         tok.type == TokenType::AUTO ||
-         tok.type == TokenType::LET)) {
+    if (tok.line == cursor_line && tok.column <= cursor_col && tok_end_col >= cursor_col &&
+        (tok.type == TokenType::IDENTIFIER || tok.type == TokenType::STRING ||
+         tok.type == TokenType::INT || tok.type == TokenType::FLOAT ||
+         tok.type == TokenType::DOUBLE || tok.type == TokenType::BOOL ||
+         tok.type == TokenType::VOID || tok.type == TokenType::BYTE ||
+         tok.type == TokenType::AUTO || tok.type == TokenType::LET)) {
       int prefix_len = cursor_col - tok.column;
       if (prefix_len > 0 && prefix_len <= static_cast<int>(tok.lexeme.size())) {
         result.prefix = std::string(tok.lexeme.substr(0, static_cast<std::size_t>(prefix_len)));
@@ -84,8 +78,7 @@ CompletionTokenResult inject_completion_token(
       continue;
     }
 
-    if (tok.line > cursor_line ||
-        (tok.line == cursor_line && tok.column >= cursor_col)) {
+    if (tok.line > cursor_line || (tok.line == cursor_line && tok.column >= cursor_col)) {
       if (result.completion_index == tokens.size()) {
         result.completion_index = result.tokens.size();
         result.tokens.push_back(comp_token);

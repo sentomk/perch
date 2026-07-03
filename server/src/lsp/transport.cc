@@ -14,7 +14,8 @@ std::string Transport::read_message() {
       line.pop_back();
     }
     if (line.empty()) {
-      if (length > 0) break;
+      if (length > 0)
+        break;
       continue;
     }
     if (line.rfind("Content-Length:", 0) == 0) {
@@ -26,7 +27,8 @@ std::string Transport::read_message() {
       continue;
     }
   }
-  if (length <= 0) return "";
+  if (length <= 0)
+    return "";
   std::string content(static_cast<std::size_t>(length), '\0');
   std::cin.read(content.data(), length);
   return content;
