@@ -132,7 +132,7 @@ jobs:
           TAG="v${VERSION}"
           VSIX="perch-${VERSION}.vsix"
 
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
+          if git ls-remote --tags origin "$TAG" | grep -q .; then
             echo "Tag $TAG already exists — updating release assets"
             gh release upload "$TAG" "$VSIX" --clobber
           else
