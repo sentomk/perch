@@ -1,0 +1,72 @@
+name: Package VSIX
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
+          curl -fsSL -o /tmp/gn.zip \
+            https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest
+          sudo unzip -d /usr/local/bin /tmp/gn.zip gn
+          sudo chmod +x /usr/local/bin/gn
+          rm /tmp/gn.zip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Setup bootstrap symlinks
+        run: bash scripts/setup-deps.sh
+
+      - name: Build C++ server
+        run: |
+          gn gen out/Default --args='is_debug=false'
+          ninja -C out/Default kinglet-lsp
+
+      - name: Build VSIX
+        run: |
+          npm ci
+          npm run compile
+          node scripts/stage-vsix.js
+          npx vsce package
+
+      - name: Read version
+        id: version
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${VERSION}"
+          VSIX="perch-${VERSION}.vsix"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists — updating release assets"
+            gh release upload "$TAG" "$VSIX" --clobber
+          else
+            echo "Creating new tag and release $TAG"
+            git tag "$TAG"
+            git push origin "$TAG"
+            gh release create "$TAG" "$VSIX" \
+              --title "perch v${VERSION}" \
+              --generate-notes
+          fi
