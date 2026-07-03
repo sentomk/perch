@@ -42,6 +42,9 @@ function resolveServerCommand(configured: string, extensionPath: string): string
   }
 
   candidates.push(path.join(extensionPath, 'bin', 'kinglet-lsp'));
+  if (process.platform === 'darwin') {
+    candidates.push(path.join(extensionPath, 'bin', 'kinglet-lsp-darwin'));
+  }
   candidates.push(path.join(extensionPath, 'out', 'Default', 'kinglet-lsp'));
   candidates.push(path.join(extensionPath, 'kinglet-lsp'));
 
