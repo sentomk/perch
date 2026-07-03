@@ -3,6 +3,7 @@
 # Bootstrap GN links (symlink/junction via scripts/setup-deps)
 /build/config
 /build/toolchain
+/build/*.gni
 /compiler
 
 # Build outputs

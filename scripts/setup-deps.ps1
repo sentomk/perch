@@ -28,9 +28,17 @@ function Set-Junction([string]$Name, [string]$Target) {
 
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'build') | Out-Null
 
-Set-Junction 'build\config' (Join-Path $Bootstrap 'build\config')
-Set-Junction 'build\toolchain' (Join-Path $Bootstrap 'build\toolchain')
-# Mirror the compiler tree so bootstrap's internal absolute "//compiler/*" GN
+Set-Junction 'build\\config' (Join-Path $Bootstrap 'build\\config')
+Set-Junction 'build\\toolchain' (Join-Path $Bootstrap 'build\\toolchain')
+# Symlink individual .gni files that build/config/BUILD.gn imports.
+foreach ($gni in Get-ChildItem (Join-Path $Bootstrap 'build\\*.gni')) {
+  $name = $gni.Name
+  $path = Join-Path $Root 'build' $name
+  if (Test-Path $path) { Remove-Item $path -Force }
+  New-Item -ItemType SymbolicLink -Path $path -Target $gni.FullName | Out-Null
+  Write-Host "linked build\\$name -> $($gni.FullName)"
+}
+# Mirror the compiler tree
 # refs (deps + include_dirs) resolve from perch's source root.
 Set-Junction 'compiler' (Join-Path $Bootstrap 'compiler')
 
