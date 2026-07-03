@@ -235,8 +235,8 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
   if (module_loader && parse_result.program) {
     // Populate result.imported_symbols[ns] from a freshly-loaded module.
     // Filters honor selected_symbols when supplied (legacy form only).
-    auto ingest = [&](const ParsedModule *mod, const ast::Decl &decl_for_loc,
-                      const std::string &ns, const std::vector<std::string> &selected_symbols,
+    auto ingest = [&](const ParsedModule *mod, const ast::Decl &decl_for_loc, const std::string &ns,
+                      const std::vector<std::string> &selected_symbols,
                       const std::string &error_msg = {}) {
       if (!mod) {
         result.diagnostics.push_back(
