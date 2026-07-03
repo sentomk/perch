@@ -31,7 +31,7 @@ const std::vector<std::string> kFmtKeys = {"indent", "max_width", "newline", "tr
                                            "extensions"};
 const std::vector<std::string> kFmtExtensions = {"align-imports", "group-using",
                                                  "align-struct-fields"};
-const std::vector<std::string> kBlockHeaders = {"modules", "targets", "build", "fmt"};
+const std::vector<std::string> kBlockHeaders = {"modules", "target", "build", "fmt"};
 
 struct ParsedManifest {
   // module name -> rel path
@@ -348,8 +348,9 @@ json::Array complete_nest(const std::string &file_path, const std::string &text,
     // headers and the project line as a snippet.
     offer(items, "modules", kCompletionKindKeyword, "modules { name = \"path.kl\" }", word, line,
           word_start, character, "modules {\n  $0\n}");
-    offer(items, "targets", kCompletionKindKeyword, "targets { name = binary \"mod\" | library }",
-          word, line, word_start, character, "targets {\n  $0\n}");
+    offer(items, "target", kCompletionKindKeyword, "target <name> { kind sources deps }", word,
+          line, word_start, character,
+          "target ${1:name} {\n  kind = \"${2:binary}\"\n  sources = [\"${3:src/}\"]$0\n}");
     offer(items, "build", kCompletionKindKeyword, "build { default backend out cache }", word, line,
           word_start, character, "build {\n  $0\n}");
     offer(items, "fmt", kCompletionKindKeyword,
@@ -407,34 +408,38 @@ json::Array complete_nest(const std::string &file_path, const std::string &text,
     return items;
   }
 
-  // ---------------------------------------------------------------- targets
-  if (block == "targets") {
-    if (string_ctx) {
-      // Inside a quoted string in targets{} — almost always the binary's
-      // module name. Offer declared modules.
-      for (const auto &[name, _] : parsed.modules) {
-        offer(items, name, kCompletionKindModule, "module entry point", in_str, line, str_start,
-              character);
-      }
-      return items;
-    }
-    // RHS keyword `binary` / `library`. Decide by looking for `=` on the
-    // line — if present and the trailing word is after it, we're at the RHS.
+  // ---------------------------------------------------------------- target
+  if (block == "target") {
     const auto eq = prefix.find('=');
     if (eq != std::string::npos) {
-      offer(items, "binary", kCompletionKindKeyword, "binary target — requires entry module", word,
-            line, word_start, character, "binary \"${1:module}\"$0");
-      offer(items, "library", kCompletionKindKeyword, "library target — no entry point", word, line,
-            word_start, character);
+      // RHS. Behavior depends on the key on the LHS.
+      std::string lhs = prefix.substr(0, eq);
+      auto lr = lhs.find_last_not_of(" \t");
+      if (lr != std::string::npos)
+        lhs = lhs.substr(0, lr + 1);
+      auto ll = lhs.find_first_not_of(" \t");
+      if (ll != std::string::npos)
+        lhs = lhs.substr(ll);
+
+      if (lhs == "kind") {
+        offer(items, "binary", kCompletionKindEnum, "executable target", word, line, word_start,
+              character);
+        offer(items, "library", kCompletionKindEnum, "library target", word, line, word_start,
+              character);
+        offer(items, "test", kCompletionKindEnum, "test target", word, line, word_start, character);
+        offer(items, "object", kCompletionKindEnum, "object file target", word, line, word_start,
+              character);
+      }
+      // sources / deps — free-form, nothing to offer.
       return items;
     }
-    // Otherwise we're at the key slot.
-    items.push_back(protocol::snippet_item_with_edit(
-        "target-binary", kCompletionKindSnippet, "name = binary \"module\"",
-        "${1:name} = binary \"${2:module}\"$0", line, word_start, character));
-    items.push_back(protocol::snippet_item_with_edit("target-library", kCompletionKindSnippet,
-                                                     "name = library", "${1:name} = library$0",
-                                                     line, word_start, character));
+    // LHS — offer known keys.
+    offer(items, "kind", kCompletionKindProperty, "target kind (binary, library, test, object)",
+          word, line, word_start, character);
+    offer(items, "sources", kCompletionKindProperty, "source files/dirs for this target", word,
+          line, word_start, character);
+    offer(items, "deps", kCompletionKindProperty, "dependencies of this target", word, line,
+          word_start, character);
     return items;
   }
 
