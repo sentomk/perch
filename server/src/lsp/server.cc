@@ -22,7 +22,8 @@ namespace kinglet::lsp {
 void Server::run() {
   while (!shutdown_requested_) {
     std::string msg = transport_.read_message();
-    if (msg.empty()) break;
+    if (msg.empty())
+      break;
     std::size_t pos = 0;
     auto parsed = json::parse(msg, pos);
     handle_message(parsed);
@@ -30,20 +31,24 @@ void Server::run() {
 }
 
 void Server::handle_message(const json::Value &msg) {
-  if (!msg.is_object()) return;
+  if (!msg.is_object())
+    return;
   const auto &obj = msg.as_object();
   auto method_it = obj.find("method");
-  if (method_it == obj.end()) return;
+  if (method_it == obj.end())
+    return;
 
   const std::string &method = method_it->second.as_string();
   lsp_log("<<< " + method);
   json::Value params;
   auto params_it = obj.find("params");
-  if (params_it != obj.end()) params = params_it->second;
+  if (params_it != obj.end())
+    params = params_it->second;
 
   json::Value id = json::Value::null();
   auto id_it = obj.find("id");
-  if (id_it != obj.end()) id = id_it->second;
+  if (id_it != obj.end())
+    id = id_it->second;
 
   if (method == "initialize") {
     send_response(id, handle_initialize(params));
@@ -61,7 +66,8 @@ void Server::handle_message(const json::Value &msg) {
     json::Object list;
     list["isIncomplete"] = json::Value(false);
     list["items"] = result;
-    lsp_log("completion: " + std::to_string(result.is_array() ? result.as_array().size() : 0) + " items");
+    lsp_log("completion: " + std::to_string(result.is_array() ? result.as_array().size() : 0) +
+            " items");
     send_response(id, json::Value(list));
   } else if (method == "textDocument/definition") {
     send_response(id, handle_definition(params));
@@ -155,9 +161,8 @@ json::Value Server::handle_initialize(const json::Value &) {
   json::Object sem_tokens;
   json::Object sem_legend;
   json::Array token_types;
-  for (const char *t : {"keyword", "function", "type", "enum", "enumMember",
-                         "variable", "parameter", "string", "number", "comment",
-                         "operator", "namespace"}) {
+  for (const char *t : {"keyword", "function", "type", "enum", "enumMember", "variable",
+                        "parameter", "string", "number", "comment", "operator", "namespace"}) {
     token_types.push_back(json::Value::string(t));
   }
   sem_legend["tokenTypes"] = json::Value(token_types);
@@ -179,14 +184,17 @@ json::Value Server::handle_initialize(const json::Value &) {
 }
 
 void Server::handle_did_open(const json::Value &params) {
-  if (!params.is_object()) return;
+  if (!params.is_object())
+    return;
   const auto &p = params.as_object();
   auto doc_it = p.find("textDocument");
-  if (doc_it == p.end()) return;
+  if (doc_it == p.end())
+    return;
   const auto &doc = doc_it->second.as_object();
   auto uri_it = doc.find("uri");
   auto text_it = doc.find("text");
-  if (uri_it == doc.end() || text_it == doc.end()) return;
+  if (uri_it == doc.end() || text_it == doc.end())
+    return;
 
   std::string uri = uri_it->second.as_string();
   int version = 0;
@@ -196,23 +204,28 @@ void Server::handle_did_open(const json::Value &params) {
   }
   store_.open(uri, text_it->second.as_string(), version);
   auto *d = store_.get(uri);
-  if (d) publish_diagnostics(*d);
+  if (d)
+    publish_diagnostics(*d);
 }
 
 void Server::handle_did_change(const json::Value &params) {
-  if (!params.is_object()) return;
+  if (!params.is_object())
+    return;
   const auto &p = params.as_object();
   auto doc_it = p.find("textDocument");
   auto changes_it = p.find("contentChanges");
-  if (doc_it == p.end() || changes_it == p.end()) return;
+  if (doc_it == p.end() || changes_it == p.end())
+    return;
 
   const auto &doc_obj = doc_it->second.as_object();
   auto uri_field = doc_obj.find("uri");
-  if (uri_field == doc_obj.end()) return;
+  if (uri_field == doc_obj.end())
+    return;
   const std::string uri = uri_field->second.as_string();
 
   Document *doc = store_.get(uri);
-  if (!doc) return;
+  if (!doc)
+    return;
 
   // Resolve a (line, character) LSP Position to a byte offset in `text`.
   // The LSP spec defines `character` as a UTF-16 code unit offset within the
@@ -222,8 +235,10 @@ void Server::handle_did_change(const json::Value &params) {
   // the end of the line (LSP §3 — "If the character value is greater than
   // the line length it defaults back to the line length.").
   auto position_to_offset = [](const std::string &text, int line, int character) -> std::size_t {
-    if (line < 0) line = 0;
-    if (character < 0) character = 0;
+    if (line < 0)
+      line = 0;
+    if (character < 0)
+      character = 0;
     std::size_t offset = 0;
     int current_line = 0;
     while (current_line < line && offset < text.size()) {
@@ -251,12 +266,14 @@ void Server::handle_did_change(const json::Value &params) {
         utf8_len = 3;
       } else if ((b & 0xF8) == 0xF0) {
         utf8_len = 4;
-        utf16_len = 2;  // surrogate pair
+        utf16_len = 2; // surrogate pair
       }
-      if (cursor + utf8_len > line_end) break;
+      if (cursor + utf8_len > line_end)
+        break;
       // Stop before consuming a code point that would overshoot `character`,
       // mirroring how editors place the cursor at code-unit boundaries.
-      if (utf16 + utf16_len > character) break;
+      if (utf16 + utf16_len > character)
+        break;
       cursor += utf8_len;
       utf16 += utf16_len;
     }
@@ -266,10 +283,12 @@ void Server::handle_did_change(const json::Value &params) {
   std::string text = doc->text;
   const auto &changes = changes_it->second.as_array();
   for (const auto &raw : changes) {
-    if (!raw.is_object()) continue;
+    if (!raw.is_object())
+      continue;
     const auto &change = raw.as_object();
     const auto text_it = change.find("text");
-    if (text_it == change.end() || !text_it->second.is_string()) continue;
+    if (text_it == change.end() || !text_it->second.is_string())
+      continue;
     const std::string &new_text = text_it->second.as_string();
 
     const auto range_it = change.find("range");
@@ -290,7 +309,8 @@ void Server::handle_did_change(const json::Value &params) {
     const auto &end = end_it->second.as_object();
     auto pos_field = [](const json::Object &o, const char *key) -> int {
       auto it = o.find(key);
-      if (it == o.end() || !it->second.is_number()) return 0;
+      if (it == o.end() || !it->second.is_number())
+        return 0;
       return static_cast<int>(it->second.as_number());
     };
     const int start_line = pos_field(start, "line");
@@ -317,7 +337,8 @@ void Server::handle_did_change(const json::Value &params) {
 }
 
 void Server::handle_did_close(const json::Value &params) {
-  if (!params.is_object()) return;
+  if (!params.is_object())
+    return;
   std::string uri = uri_from_params(params);
   if (!uri.empty()) {
     json::Object diag_params;
@@ -342,7 +363,8 @@ void Server::merge_preserved_analysis(AnalysisResult &next, const AnalysisResult
 }
 
 void Server::ensure_analyzed(Document &doc) {
-  if (!doc.dirty) return;
+  if (!doc.dirty)
+    return;
   try {
     const std::string file_path = uri_to_path(doc.uri);
     // .nest manifests use a separate analyzer — different grammar, different
@@ -373,7 +395,8 @@ void Server::publish_diagnostics(Document &doc) {
   ensure_analyzed(doc);
   json::Array items;
   for (const auto &diag : doc.analysis.diagnostics) {
-    items.push_back(protocol::diagnostic(diag.line, diag.col, diag.message, diag.severity, diag.length));
+    items.push_back(
+        protocol::diagnostic(diag.line, diag.col, diag.message, diag.severity, diag.length));
   }
   json::Object diag_params;
   diag_params["uri"] = json::Value::string(doc.uri);
@@ -386,7 +409,8 @@ json::Value Server::handle_completion(const json::Value &params) {
   std::string uri = uri_from_params(params);
   auto [line, character] = position_from_params(params);
   auto *doc = store_.get(uri);
-  if (!doc) return json::Value(items);
+  if (!doc)
+    return json::Value(items);
 
   // kinglet.nest manifests follow a different grammar and have their own
   // completion rules; they don't pass through the parser-driven token
@@ -406,7 +430,10 @@ json::Value Server::handle_completion(const json::Value &params) {
   std::istringstream stream(doc->text);
   std::string l;
   while (std::getline(stream, l)) {
-    if (cur_line == line) { line_text = l; break; }
+    if (cur_line == line) {
+      line_text = l;
+      break;
+    }
     ++cur_line;
   }
 
@@ -471,8 +498,9 @@ json::Value Server::handle_completion(const json::Value &params) {
         break;
       }
 
-      CompletionResolver resolver(doc->analysis, token_result.prefix.empty() ? prefix : token_result.prefix,
-                                  line, character, uri);
+      CompletionResolver resolver(doc->analysis,
+                                  token_result.prefix.empty() ? prefix : token_result.prefix, line,
+                                  character, uri);
       return json::Value(resolver.resolve(info));
     }
   }
@@ -484,12 +512,14 @@ json::Value Server::handle_document_symbol(const json::Value &params) {
   json::Array symbols;
   std::string uri = uri_from_params(params);
   auto *doc = store_.get(uri);
-  if (!doc) return json::Value(symbols);
+  if (!doc)
+    return json::Value(symbols);
 
   ensure_analyzed(*doc);
 
   for (const auto &sym : doc->analysis.symbols.symbols) {
-    if (sym.name.empty()) continue;
+    if (sym.name.empty())
+      continue;
     json::Object item;
     item["name"] = json::Value::string(sym.name);
 
@@ -539,7 +569,8 @@ json::Value Server::handle_signature_help(const json::Value &params) {
   std::string uri = uri_from_params(params);
   auto [line, character] = position_from_params(params);
   auto *doc = store_.get(uri);
-  if (!doc) return json::Value(json::Object{});
+  if (!doc)
+    return json::Value(json::Object{});
 
   ensure_analyzed(*doc);
 
@@ -556,7 +587,8 @@ json::Value Server::handle_signature_help(const json::Value &params) {
   }
   lines.push_back(current);
 
-  if (line < 0 || line >= static_cast<int>(lines.size())) return json::Value(json::Object{});
+  if (line < 0 || line >= static_cast<int>(lines.size()))
+    return json::Value(json::Object{});
   const std::string &line_text = lines[static_cast<std::size_t>(line)];
 
   // Walk backwards from cursor to find the function name and count commas for active parameter
@@ -565,7 +597,8 @@ json::Value Server::handle_signature_help(const json::Value &params) {
   int func_end = -1;
   for (int i = character - 1; i >= 0; --i) {
     char c = line_text[static_cast<std::size_t>(i)];
-    if (c == ')') ++paren_depth;
+    if (c == ')')
+      ++paren_depth;
     else if (c == '(') {
       if (paren_depth == 0) {
         func_end = i;
@@ -576,16 +609,20 @@ json::Value Server::handle_signature_help(const json::Value &params) {
       ++active_param;
     }
   }
-  if (func_end < 0) return json::Value(json::Object{});
+  if (func_end < 0)
+    return json::Value(json::Object{});
 
   // Extract function name (walk back past whitespace and identifier chars)
   int name_end = func_end;
   int name_start = name_end;
-  while (name_start > 0 && (std::isalnum(static_cast<unsigned char>(line_text[static_cast<std::size_t>(name_start - 1)])) ||
-         line_text[static_cast<std::size_t>(name_start - 1)] == '_'))
+  while (name_start > 0 && (std::isalnum(static_cast<unsigned char>(
+                                line_text[static_cast<std::size_t>(name_start - 1)])) ||
+                            line_text[static_cast<std::size_t>(name_start - 1)] == '_'))
     --name_start;
-  std::string func_name = line_text.substr(static_cast<std::size_t>(name_start), static_cast<std::size_t>(name_end - name_start));
-  if (func_name.empty()) return json::Value(json::Object{});
+  std::string func_name = line_text.substr(static_cast<std::size_t>(name_start),
+                                           static_cast<std::size_t>(name_end - name_start));
+  if (func_name.empty())
+    return json::Value(json::Object{});
 
   // Look up the function in the symbol table
   auto visible = doc->analysis.symbols.visible_at(line + 1);
@@ -596,7 +633,8 @@ json::Value Server::handle_signature_help(const json::Value &params) {
       json::Array param_infos;
       for (std::size_t i = 0; i < sym->params.size(); ++i) {
         std::string param_str = sym->params[i].type.to_string() + " " + sym->params[i].name;
-        if (i > 0) sig += ", ";
+        if (i > 0)
+          sig += ", ";
         sig += param_str;
         json::Object pi;
         pi["label"] = json::Value::string(param_str);
@@ -622,16 +660,17 @@ json::Value Server::handle_signature_help(const json::Value &params) {
   return json::Value(json::Object{});
 }
 
-
 json::Value Server::handle_definition(const json::Value &params) {
   std::string uri = uri_from_params(params);
   auto [line, character] = position_from_params(params);
   auto *doc = store_.get(uri);
-  if (!doc) return json::Value::null();
+  if (!doc)
+    return json::Value::null();
 
   ensure_analyzed(*doc);
   std::string word = get_full_word_at(doc->text, line, character);
-  if (word.empty()) return json::Value::null();
+  if (word.empty())
+    return json::Value::null();
 
   const auto *sym = doc->analysis.symbols.find_definition(word, line + 1);
   if (!sym) {
@@ -643,7 +682,8 @@ json::Value Server::handle_definition(const json::Value &params) {
       }
     }
   }
-  if (!sym) return json::Value::null();
+  if (!sym)
+    return json::Value::null();
 
   return protocol::location(uri, sym->location.line, sym->location.column);
 }
@@ -652,11 +692,13 @@ json::Value Server::handle_hover(const json::Value &params) {
   std::string uri = uri_from_params(params);
   auto [line, character] = position_from_params(params);
   auto *doc = store_.get(uri);
-  if (!doc) return json::Value::null();
+  if (!doc)
+    return json::Value::null();
 
   ensure_analyzed(*doc);
   std::string word = get_full_word_at(doc->text, line, character);
-  if (word.empty()) return json::Value::null();
+  if (word.empty())
+    return json::Value::null();
 
   const auto *sym = doc->analysis.symbols.find_definition(word, line + 1);
   if (!sym) {
@@ -668,13 +710,15 @@ json::Value Server::handle_hover(const json::Value &params) {
       }
     }
   }
-  if (!sym) return json::Value::null();
+  if (!sym)
+    return json::Value::null();
 
   std::string content;
   if (sym->kind == SymbolKind::Function) {
     content = sym->return_type + " " + sym->name + "(";
     for (std::size_t i = 0; i < sym->params.size(); ++i) {
-      if (i > 0) content += ", ";
+      if (i > 0)
+        content += ", ";
       content += sym->params[i].type.to_string() + " " + sym->params[i].name;
     }
     content += ")";
@@ -688,7 +732,8 @@ json::Value Server::handle_hover(const json::Value &params) {
     content = "enum " + sym->name + " {\n";
     for (std::size_t i = 0; i < sym->variants.size(); ++i) {
       content += "  " + sym->variants[i];
-      if (i + 1 < sym->variants.size()) content += ",";
+      if (i + 1 < sym->variants.size())
+        content += ",";
       content += "\n";
     }
     content += "}";
@@ -705,21 +750,26 @@ json::Value Server::handle_hover(const json::Value &params) {
 }
 
 std::string Server::uri_from_params(const json::Value &params) const {
-  if (!params.is_object()) return "";
+  if (!params.is_object())
+    return "";
   const auto &p = params.as_object();
   auto doc_it = p.find("textDocument");
-  if (doc_it == p.end()) return "";
+  if (doc_it == p.end())
+    return "";
   const auto &doc = doc_it->second.as_object();
   auto uri_it = doc.find("uri");
-  if (uri_it == doc.end()) return "";
+  if (uri_it == doc.end())
+    return "";
   return uri_it->second.as_string();
 }
 
 std::pair<int, int> Server::position_from_params(const json::Value &params) const {
-  if (!params.is_object()) return {0, 0};
+  if (!params.is_object())
+    return {0, 0};
   const auto &p = params.as_object();
   auto pos_it = p.find("position");
-  if (pos_it == p.end()) return {0, 0};
+  if (pos_it == p.end())
+    return {0, 0};
   const auto &pos = pos_it->second.as_object();
   int line = static_cast<int>(pos.at("line").as_number());
   int character = static_cast<int>(pos.at("character").as_number());
@@ -730,17 +780,26 @@ std::string Server::get_word_at(const std::string &text, int line, int character
   int cur_line = 0;
   std::size_t line_start = 0;
   for (std::size_t i = 0; i < text.size(); ++i) {
-    if (cur_line == line) { line_start = i; break; }
-    if (text[i] == '\n') { ++cur_line; line_start = i + 1; }
+    if (cur_line == line) {
+      line_start = i;
+      break;
+    }
+    if (text[i] == '\n') {
+      ++cur_line;
+      line_start = i + 1;
+    }
   }
   std::size_t pos = line_start + static_cast<std::size_t>(character);
-  if (pos > text.size()) return "";
+  if (pos > text.size())
+    return "";
 
   std::size_t start = pos;
-  while (start > line_start && (std::isalnum(static_cast<unsigned char>(text[start - 1])) || text[start - 1] == '_'))
+  while (start > line_start &&
+         (std::isalnum(static_cast<unsigned char>(text[start - 1])) || text[start - 1] == '_'))
     --start;
 
-  if (start == pos) return "";
+  if (start == pos)
+    return "";
   return text.substr(start, pos - start);
 }
 
@@ -748,20 +807,30 @@ std::string Server::get_full_word_at(const std::string &text, int line, int char
   int cur_line = 0;
   std::size_t line_start = 0;
   for (std::size_t i = 0; i < text.size(); ++i) {
-    if (cur_line == line) { line_start = i; break; }
-    if (text[i] == '\n') { ++cur_line; line_start = i + 1; }
+    if (cur_line == line) {
+      line_start = i;
+      break;
+    }
+    if (text[i] == '\n') {
+      ++cur_line;
+      line_start = i + 1;
+    }
   }
   std::size_t pos = line_start + static_cast<std::size_t>(character);
-  if (pos > text.size()) return "";
+  if (pos > text.size())
+    return "";
 
   std::size_t start = pos;
-  while (start > line_start && (std::isalnum(static_cast<unsigned char>(text[start - 1])) || text[start - 1] == '_'))
+  while (start > line_start &&
+         (std::isalnum(static_cast<unsigned char>(text[start - 1])) || text[start - 1] == '_'))
     --start;
   std::size_t end = pos;
-  while (end < text.size() && text[end] != '\n' && (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_'))
+  while (end < text.size() && text[end] != '\n' &&
+         (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_'))
     ++end;
 
-  if (start == end) return "";
+  if (start == end)
+    return "";
   return text.substr(start, end - start);
 }
 
@@ -777,18 +846,32 @@ json::Value Server::handle_semantic_tokens(const json::Value &params) {
   ensure_analyzed(*doc);
 
   // Token type indices (must match legend order)
-  enum TT { Keyword=0, Function=1, Type=2, Enum=3, EnumMember=4,
-            Variable=5, Parameter=6, String=7, Number=8, Comment=9,
-            Operator=10, Namespace=11 };
+  enum TT {
+    Keyword = 0,
+    Function = 1,
+    Type = 2,
+    Enum = 3,
+    EnumMember = 4,
+    Variable = 5,
+    Parameter = 6,
+    String = 7,
+    Number = 8,
+    Comment = 9,
+    Operator = 10,
+    Namespace = 11
+  };
 
   // Build a set of known type/enum/function names for classification
   std::set<std::string> type_names;
   std::set<std::string> enum_names;
   std::set<std::string> func_names;
   for (const auto &sym : doc->analysis.symbols.symbols) {
-    if (sym.kind == SymbolKind::Struct) type_names.insert(sym.name);
-    else if (sym.kind == SymbolKind::Concept) type_names.insert(sym.name);
-    else if (sym.kind == SymbolKind::Enum) enum_names.insert(sym.name);
+    if (sym.kind == SymbolKind::Struct)
+      type_names.insert(sym.name);
+    else if (sym.kind == SymbolKind::Concept)
+      type_names.insert(sym.name);
+    else if (sym.kind == SymbolKind::Enum)
+      enum_names.insert(sym.name);
     else if (sym.kind == SymbolKind::Function) {
       func_names.insert(sym.name);
       auto colons = sym.name.find("::");
@@ -807,58 +890,103 @@ json::Value Server::handle_semantic_tokens(const json::Value &params) {
   int prev_start = 0;
 
   for (const auto &tok : tokens) {
-    if (tok.type == TokenType::END_OF_FILE || tok.type == TokenType::ERROR) continue;
-    if (tok.lexeme.empty()) continue;
+    if (tok.type == TokenType::END_OF_FILE || tok.type == TokenType::ERROR)
+      continue;
+    if (tok.lexeme.empty())
+      continue;
 
     int token_type = -1;
 
     switch (tok.type) {
-    case TokenType::AUTO: case TokenType::INT: case TokenType::FLOAT:
-    case TokenType::DOUBLE: case TokenType::BOOL: case TokenType::STRING:
-    case TokenType::VOID: case TokenType::BYTE: case TokenType::CONST:
-    case TokenType::RETURN: case TokenType::IF: case TokenType::ELSE:
-    case TokenType::FOR: case TokenType::WHILE: case TokenType::BREAK:
-    case TokenType::CONTINUE: case TokenType::GUARD: case TokenType::MATCH:
-    case TokenType::PUB: case TokenType::LET: case TokenType::WHEN:
-    case TokenType::IMPORT: case TokenType::EXPORT: case TokenType::NAMESPACE:
+    case TokenType::AUTO:
+    case TokenType::INT:
+    case TokenType::FLOAT:
+    case TokenType::DOUBLE:
+    case TokenType::BOOL:
+    case TokenType::STRING:
+    case TokenType::VOID:
+    case TokenType::BYTE:
+    case TokenType::CONST:
+    case TokenType::RETURN:
+    case TokenType::IF:
+    case TokenType::ELSE:
+    case TokenType::FOR:
+    case TokenType::WHILE:
+    case TokenType::BREAK:
+    case TokenType::CONTINUE:
+    case TokenType::GUARD:
+    case TokenType::MATCH:
+    case TokenType::PUB:
+    case TokenType::LET:
+    case TokenType::WHEN:
+    case TokenType::IMPORT:
+    case TokenType::EXPORT:
+    case TokenType::NAMESPACE:
     case TokenType::USING:
-    case TokenType::STRUCT: case TokenType::ENUM: case TokenType::CONCEPT:
-    case TokenType::SPAWN: case TokenType::SELECT: case TokenType::TRUE:
-    case TokenType::FALSE: case TokenType::NULL_:
+    case TokenType::STRUCT:
+    case TokenType::ENUM:
+    case TokenType::CONCEPT:
+    case TokenType::SPAWN:
+    case TokenType::SELECT:
+    case TokenType::TRUE:
+    case TokenType::FALSE:
+    case TokenType::NULL_:
       token_type = TT::Keyword;
       break;
     case TokenType::STRING_LIT:
       token_type = TT::String;
       break;
-    case TokenType::INTEGER: case TokenType::FLOAT_LIT: case TokenType::CHAR_LIT:
+    case TokenType::INTEGER:
+    case TokenType::FLOAT_LIT:
+    case TokenType::CHAR_LIT:
       token_type = TT::Number;
       break;
-    case TokenType::PLUS: case TokenType::MINUS: case TokenType::STAR:
-    case TokenType::SLASH: case TokenType::PERCENT: case TokenType::EQUAL:
-    case TokenType::EQUAL_EQUAL: case TokenType::BANG_EQUAL:
-    case TokenType::LESS: case TokenType::GREATER:
-    case TokenType::LESS_EQUAL: case TokenType::GREATER_EQUAL:
-    case TokenType::AMP_AMP: case TokenType::PIPE_PIPE: case TokenType::BANG:
-    case TokenType::AMP: case TokenType::PIPE: case TokenType::CARET:
-    case TokenType::TILDE: case TokenType::PIPE_GREATER:
-    case TokenType::FAT_ARROW: case TokenType::ARROW:
+    case TokenType::PLUS:
+    case TokenType::MINUS:
+    case TokenType::STAR:
+    case TokenType::SLASH:
+    case TokenType::PERCENT:
+    case TokenType::EQUAL:
+    case TokenType::EQUAL_EQUAL:
+    case TokenType::BANG_EQUAL:
+    case TokenType::LESS:
+    case TokenType::GREATER:
+    case TokenType::LESS_EQUAL:
+    case TokenType::GREATER_EQUAL:
+    case TokenType::AMP_AMP:
+    case TokenType::PIPE_PIPE:
+    case TokenType::BANG:
+    case TokenType::AMP:
+    case TokenType::PIPE:
+    case TokenType::CARET:
+    case TokenType::TILDE:
+    case TokenType::PIPE_GREATER:
+    case TokenType::FAT_ARROW:
+    case TokenType::ARROW:
       token_type = TT::Operator;
       break;
     case TokenType::IDENTIFIER: {
       std::string name(tok.lexeme);
-      if (name == "self") token_type = TT::Parameter;
-      else if (type_names.count(name)) token_type = TT::Type;
-      else if (enum_names.count(name)) token_type = TT::Enum;
-      else if (func_names.count(name)) token_type = TT::Function;
-      else if (name == "io" || name == "fs" || name == "sys") token_type = TT::Namespace;
-      else token_type = TT::Variable;
+      if (name == "self")
+        token_type = TT::Parameter;
+      else if (type_names.count(name))
+        token_type = TT::Type;
+      else if (enum_names.count(name))
+        token_type = TT::Enum;
+      else if (func_names.count(name))
+        token_type = TT::Function;
+      else if (name == "io" || name == "fs" || name == "sys")
+        token_type = TT::Namespace;
+      else
+        token_type = TT::Variable;
       break;
     }
     default:
       break;
     }
 
-    if (token_type < 0) continue;
+    if (token_type < 0)
+      continue;
 
     int tok_line = tok.line - 1;
     int tok_col = tok.column - 1;

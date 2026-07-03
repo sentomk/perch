@@ -17,8 +17,10 @@ CompletionResolver::CompletionResolver(const AnalysisResult &analysis, const std
     : analysis_(analysis), prefix_(prefix), line_(line), character_(character), uri_(uri) {}
 
 bool CompletionResolver::matches_prefix(const std::string &name) const {
-  if (prefix_.empty()) return true;
-  if (name.size() < prefix_.size()) return false;
+  if (prefix_.empty())
+    return true;
+  if (name.size() < prefix_.size())
+    return false;
   return name.compare(0, prefix_.size(), prefix_) == 0;
 }
 
@@ -62,29 +64,36 @@ json::Array CompletionResolver::resolve(const CompletionInfo &info) {
 void CompletionResolver::add_scope_symbols(json::Array &items) {
   auto visible = analysis_.symbols.visible_at(line_ + 1);
   for (const auto *sym : visible) {
-    if (!matches_prefix(sym->name)) continue;
+    if (!matches_prefix(sym->name))
+      continue;
     // Skip names that are not valid identifiers (e.g. stray punctuation a
     // recovering parser may have registered from an incomplete expression).
     if (sym->name.empty() ||
         !(std::isalpha(static_cast<unsigned char>(sym->name[0])) || sym->name[0] == '_'))
       continue;
     bool sym_is_qualified = sym->name.find("::") != std::string::npos;
-    if (sym_is_qualified) continue;
+    if (sym_is_qualified)
+      continue;
     int kind = 6;
-    if (sym->kind == SymbolKind::Function) kind = 3;
-    else if (sym->kind == SymbolKind::Struct) kind = 22;
-    else if (sym->kind == SymbolKind::Enum) kind = 13;
+    if (sym->kind == SymbolKind::Function)
+      kind = 3;
+    else if (sym->kind == SymbolKind::Struct)
+      kind = 22;
+    else if (sym->kind == SymbolKind::Enum)
+      kind = 13;
     std::string detail = sym->type_name;
     if (sym->kind == SymbolKind::Function) {
       detail = sym->return_type + " " + sym->name + "(";
       for (std::size_t i = 0; i < sym->params.size(); ++i) {
-        if (i > 0) detail += ", ";
+        if (i > 0)
+          detail += ", ";
         detail += sym->params[i].type.to_string() + " " + sym->params[i].name;
       }
       detail += ")";
       std::string snippet = sym->name + "(";
       for (std::size_t i = 0; i < sym->params.size(); ++i) {
-        if (i > 0) snippet += ", ";
+        if (i > 0)
+          snippet += ", ";
         snippet += "${" + std::to_string(i + 1) + ":" + sym->params[i].name + "}";
       }
       snippet += ")";
@@ -97,19 +106,22 @@ void CompletionResolver::add_scope_symbols(json::Array &items) {
 
 void CompletionResolver::add_io_members(json::Array &items) {
   if (analysis_.opened_namespaces.count("io")) {
-    for (const auto &[name, detail] : std::vector<std::pair<std::string, std::string>>{
-             {"out", "io::out — stdout output"},
-             {"err", "io::err — stderr output"},
-             {"in", "io::in — stdin input"}}) {
-      if (!matches_prefix(name)) continue;
+    for (const auto &[name, detail] :
+         std::vector<std::pair<std::string, std::string>>{{"out", "io::out — stdout output"},
+                                                          {"err", "io::err — stderr output"},
+                                                          {"in", "io::in — stdin input"}}) {
+      if (!matches_prefix(name))
+        continue;
       items.push_back(protocol::completion_item(name, 3, detail));
     }
   } else if (analysis_.used_namespaces.count("io")) {
-    for (const auto &[name, qualified, detail] : std::vector<std::tuple<std::string, std::string, std::string>>{
+    for (const auto &[name, qualified, detail] :
+         std::vector<std::tuple<std::string, std::string, std::string>>{
              {"out", "io::out", "io::out — stdout output"},
              {"err", "io::err", "io::err — stderr output"},
              {"in", "io::in", "io::in — stdin input"}}) {
-      if (!matches_prefix(name)) continue;
+      if (!matches_prefix(name))
+        continue;
       json::Object item;
       item["label"] = json::Value::string(name);
       item["kind"] = json::Value::number(3);
@@ -129,7 +141,8 @@ void CompletionResolver::add_type_keywords(json::Array &items, bool include_void
   for (const char *kw : {"int", "float", "double", "bool", "string", "void", "byte", "auto"}) {
     if (!include_void_auto && (std::string(kw) == "void" || std::string(kw) == "auto"))
       continue;
-    if (!matches_prefix(kw)) continue;
+    if (!matches_prefix(kw))
+      continue;
     json::Object item;
     item["label"] = json::Value::string(kw);
     item["kind"] = json::Value::number(14);
@@ -144,18 +157,19 @@ void CompletionResolver::add_cast_keywords(json::Array &items) {
   // space is inserted (the user follows with '('), and void/auto are
   // excluded since neither is a valid conversion target.
   for (const char *kw : {"int", "float", "double", "bool", "string", "byte"}) {
-    if (!matches_prefix(kw)) continue;
+    if (!matches_prefix(kw))
+      continue;
     items.push_back(protocol::completion_item(kw, 14));
   }
 }
 
 void CompletionResolver::add_statement_keywords(json::Array &items) {
   // Keywords valid inside a function body (statement position).
-  const char *kw_with_space[] = {"if",    "else", "for",   "while",
-                                  "return", "match", "let",  "const"};
+  const char *kw_with_space[] = {"if", "else", "for", "while", "return", "match", "let", "const"};
   const char *kw_standalone[] = {"break", "continue", "true", "false", "null"};
   for (const char *kw : kw_with_space) {
-    if (!matches_prefix(kw)) continue;
+    if (!matches_prefix(kw))
+      continue;
     json::Object item;
     item["label"] = json::Value::string(kw);
     item["kind"] = json::Value::number(14);
@@ -163,7 +177,8 @@ void CompletionResolver::add_statement_keywords(json::Array &items) {
     items.push_back(json::Value(item));
   }
   for (const char *kw : kw_standalone) {
-    if (!matches_prefix(kw)) continue;
+    if (!matches_prefix(kw))
+      continue;
     items.push_back(protocol::completion_item(kw, 14));
   }
 }
@@ -171,7 +186,8 @@ void CompletionResolver::add_statement_keywords(json::Array &items) {
 void CompletionResolver::add_decl_keywords(json::Array &items) {
   // Top-level declaration keywords (not valid inside a function body).
   for (const char *kw : {"import", "pub", "export", "using", "struct", "enum", "concept"}) {
-    if (!matches_prefix(kw)) continue;
+    if (!matches_prefix(kw))
+      continue;
     json::Object item;
     item["label"] = json::Value::string(kw);
     item["kind"] = json::Value::number(14);
@@ -184,7 +200,8 @@ void CompletionResolver::add_namespace_completions(json::Array &items) {
   for (const char *ns : {"io", "fs", "sys"}) {
     if (!analysis_.used_namespaces.count(ns) && !analysis_.opened_namespaces.count(ns))
       continue;
-    if (!matches_prefix(ns)) continue;
+    if (!matches_prefix(ns))
+      continue;
     json::Object item;
     item["label"] = json::Value::string(ns);
     item["kind"] = json::Value::number(9);
@@ -198,7 +215,8 @@ void CompletionResolver::add_namespace_completions(json::Array &items) {
   }
   // Imported namespaces (`import "..." as foo;`) — insert "foo::" and re-trigger.
   for (const auto &ns : analysis_.imported_namespaces) {
-    if (!matches_prefix(ns)) continue;
+    if (!matches_prefix(ns))
+      continue;
     json::Object item;
     item["label"] = json::Value::string(ns);
     item["kind"] = json::Value::number(9);
@@ -219,18 +237,23 @@ json::Array CompletionResolver::resolve_top_level() {
   add_decl_keywords(items);
   add_namespace_completions(items);
   // Declaration-only snippets (no control-flow statement snippets at file scope).
-  struct Snippet { const char *label; const char *body; const char *detail; };
+  struct Snippet {
+    const char *label;
+    const char *body;
+    const char *detail;
+  };
   Snippet snippets[] = {
-    {"fn", "int ${1:name}(${2:params}) {\n\t$0\n}", "function declaration"},
-    {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition"},
-    {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition"},
-    {"concept", "concept ${1:Name} {\n\t$0\n}", "concept definition"},
-    {"using", "using ${1:io};$0", "using declaration"},
-    {"import", "import \"${1:file.kl}\"$0", "import module"},
-    {"main", "int main() {\n\t$0\n\treturn 0;\n}", "main function"},
+      {"fn", "int ${1:name}(${2:params}) {\n\t$0\n}", "function declaration"},
+      {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition"},
+      {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition"},
+      {"concept", "concept ${1:Name} {\n\t$0\n}", "concept definition"},
+      {"using", "using ${1:io};$0", "using declaration"},
+      {"import", "import \"${1:file.kl}\"$0", "import module"},
+      {"main", "int main() {\n\t$0\n\treturn 0;\n}", "main function"},
   };
   for (const auto &s : snippets) {
-    if (!matches_prefix(s.label)) continue;
+    if (!matches_prefix(s.label))
+      continue;
     items.push_back(protocol::completion_item(s.label, 15, s.detail, s.body, 2));
   }
   return items;
@@ -254,8 +277,7 @@ json::Array CompletionResolver::resolve_expression() {
   return items;
 }
 
-json::Array CompletionResolver::resolve_type_expr(
-    const std::vector<std::string> &type_params) {
+json::Array CompletionResolver::resolve_type_expr(const std::vector<std::string> &type_params) {
   json::Array items;
   add_type_keywords(items);
   add_type_params(items, type_params);
@@ -264,16 +286,15 @@ json::Array CompletionResolver::resolve_type_expr(
     if (sym->kind != SymbolKind::Struct && sym->kind != SymbolKind::Enum &&
         sym->kind != SymbolKind::Concept)
       continue;
-    if (!matches_prefix(sym->name)) continue;
-    int kind = (sym->kind == SymbolKind::Struct) ? 22 :
-               (sym->kind == SymbolKind::Enum) ? 13 : 8;
+    if (!matches_prefix(sym->name))
+      continue;
+    int kind = (sym->kind == SymbolKind::Struct) ? 22 : (sym->kind == SymbolKind::Enum) ? 13 : 8;
     items.push_back(protocol::completion_item(sym->name, kind, sym->type_name));
   }
   return items;
 }
 
-json::Array CompletionResolver::resolve_param_type(
-    const std::vector<std::string> &type_params) {
+json::Array CompletionResolver::resolve_param_type(const std::vector<std::string> &type_params) {
   // Parameter types: same as a type expression, but `void` and `auto` are
   // never valid as a parameter type, so they are excluded.
   json::Array items;
@@ -284,20 +305,21 @@ json::Array CompletionResolver::resolve_param_type(
     if (sym->kind != SymbolKind::Struct && sym->kind != SymbolKind::Enum &&
         sym->kind != SymbolKind::Concept)
       continue;
-    if (!matches_prefix(sym->name)) continue;
-    int kind = (sym->kind == SymbolKind::Struct) ? 22 :
-               (sym->kind == SymbolKind::Enum) ? 13 : 8;
+    if (!matches_prefix(sym->name))
+      continue;
+    int kind = (sym->kind == SymbolKind::Struct) ? 22 : (sym->kind == SymbolKind::Enum) ? 13 : 8;
     items.push_back(protocol::completion_item(sym->name, kind, sym->type_name));
   }
   return items;
 }
 
-void CompletionResolver::add_type_params(
-    json::Array &items, const std::vector<std::string> &type_params) {
+void CompletionResolver::add_type_params(json::Array &items,
+                                         const std::vector<std::string> &type_params) {
   // Generic type parameters (e.g. concept Printable<T>) are valid type names
   // inside the declaration's body. Kind 25 = TypeParameter.
   for (const auto &tp : type_params) {
-    if (!matches_prefix(tp)) continue;
+    if (!matches_prefix(tp))
+      continue;
     items.push_back(protocol::completion_item(tp, 25, "type parameter"));
   }
 }
@@ -305,8 +327,7 @@ void CompletionResolver::add_type_params(
 // Resolve a single member (field or method) of `type_name` to the type it
 // yields. `is_call` selects a method's return type; otherwise a struct field's
 // type. Returns empty if unresolved.
-std::string CompletionResolver::member_type(const std::string &type_name,
-                                            const std::string &member,
+std::string CompletionResolver::member_type(const std::string &type_name, const std::string &member,
                                             bool is_call) {
   auto visible = analysis_.symbols.visible_at(line_ + 1);
   if (is_call) {
@@ -320,7 +341,8 @@ std::string CompletionResolver::member_type(const std::string &type_name,
   for (const auto *sym : visible) {
     if (sym->kind == SymbolKind::Struct && sym->name == type_name) {
       for (const auto &field : sym->fields) {
-        if (field.name == member) return field.type_name;
+        if (field.name == member)
+          return field.type_name;
       }
     }
   }
@@ -336,10 +358,12 @@ std::string CompletionResolver::walk_access_chain(const std::string &chain) {
   while (true) {
     std::size_t sep = chain.find('\x1f', start);
     segments.push_back(chain.substr(start, sep - start));
-    if (sep == std::string::npos) break;
+    if (sep == std::string::npos)
+      break;
     start = sep + 1;
   }
-  if (segments.empty()) return {};
+  if (segments.empty())
+    return {};
 
   // Resolve the base segment (a variable or type name) to a type.
   std::string base = segments[0];
@@ -347,8 +371,10 @@ std::string CompletionResolver::walk_access_chain(const std::string &chain) {
   auto visible = analysis_.symbols.visible_at(line_ + 1);
   bool is_type = false;
   for (const auto *sym : visible) {
-    if ((sym->kind == SymbolKind::Struct || sym->kind == SymbolKind::Concept) &&
-        sym->name == base) { is_type = true; break; }
+    if ((sym->kind == SymbolKind::Struct || sym->kind == SymbolKind::Concept) && sym->name == base) {
+      is_type = true;
+      break;
+    }
   }
   if (!is_type) {
     for (const auto *sym : visible) {
@@ -368,21 +394,24 @@ std::string CompletionResolver::walk_access_chain(const std::string &chain) {
       seg = seg.substr(0, seg.size() - 2);
     }
     cur_type = member_type(cur_type, seg, is_call);
-    if (cur_type.empty()) return {};
+    if (cur_type.empty())
+      return {};
   }
   return cur_type;
 }
 
 json::Array CompletionResolver::resolve_field_access(const std::string &receiver_type) {
   json::Array items;
-  if (receiver_type.empty()) return items;
+  if (receiver_type.empty())
+    return items;
 
   // A receiver may be an access chain (e.g. "r\x1fscale()") encoded by the
   // parser; walk it to a concrete type before resolving members.
   std::string rt = receiver_type;
   if (receiver_type.find('\x1f') != std::string::npos) {
     rt = walk_access_chain(receiver_type);
-    if (rt.empty()) return items;
+    if (rt.empty())
+      return items;
   }
 
   // Built-in io stream objects (io::out / io::err / io::in).
@@ -404,8 +433,7 @@ json::Array CompletionResolver::resolve_field_access(const std::string &receiver
   std::string type_name = rt;
   bool found_as_type = false;
   for (const auto *sym : visible) {
-    if ((sym->kind == SymbolKind::Struct || sym->kind == SymbolKind::Concept) &&
-        sym->name == rt) {
+    if ((sym->kind == SymbolKind::Struct || sym->kind == SymbolKind::Concept) && sym->name == rt) {
       found_as_type = true;
       break;
     }
@@ -432,7 +460,8 @@ json::Array CompletionResolver::resolve_field_access(const std::string &receiver
              {"trim", "string — trim whitespace"},
              {"to_upper", "string — uppercase"},
              {"to_lower", "string — lowercase"}}) {
-      if (!matches_prefix(name)) continue;
+      if (!matches_prefix(name))
+        continue;
       items.push_back(protocol::completion_item(name, 2, detail, name + "($1)", 2));
     }
     return items;
@@ -451,7 +480,8 @@ json::Array CompletionResolver::resolve_field_access(const std::string &receiver
              {"slice", "T[] — sub-array"},
              {"reverse", "void — reverse in place"},
              {"resize", "void — grow/shrink to n, filling with default"}}) {
-      if (!matches_prefix(name)) continue;
+      if (!matches_prefix(name))
+        continue;
       items.push_back(protocol::completion_item(name, 2, detail, name + "($1)", 2));
     }
     return items;
@@ -460,7 +490,8 @@ json::Array CompletionResolver::resolve_field_access(const std::string &receiver
   for (const auto *sym : visible) {
     if (sym->kind == SymbolKind::Struct && sym->name == type_name) {
       for (const auto &field : sym->fields) {
-        if (!matches_prefix(field.name)) continue;
+        if (!matches_prefix(field.name))
+          continue;
         items.push_back(protocol::completion_item(field.name, 5, field.type_name));
       }
     }
@@ -469,14 +500,19 @@ json::Array CompletionResolver::resolve_field_access(const std::string &receiver
       if (sym->name.size() > method_prefix.size() &&
           sym->name.compare(0, method_prefix.size(), method_prefix) == 0) {
         std::string method_name = sym->name.substr(method_prefix.size());
-        if (!matches_prefix(method_name)) continue;
+        if (!matches_prefix(method_name))
+          continue;
         std::string detail = sym->return_type + " " + method_name + "(";
         std::string snippet = method_name + "(";
         int snippet_idx = 1;
         bool first = true;
         for (std::size_t i = 0; i < sym->params.size(); ++i) {
-          if (sym->params[i].name == "self") continue;
-          if (!first) { detail += ", "; snippet += ", "; }
+          if (sym->params[i].name == "self")
+            continue;
+          if (!first) {
+            detail += ", ";
+            snippet += ", ";
+          }
           first = false;
           detail += sym->params[i].type.to_string() + " " + sym->params[i].name;
           snippet += "${" + std::to_string(snippet_idx++) + ":" + sym->params[i].name + "}";
@@ -493,11 +529,12 @@ json::Array CompletionResolver::resolve_field_access(const std::string &receiver
 json::Array CompletionResolver::resolve_namespace_access(const std::string &ns_name) {
   json::Array items;
   if (ns_name == "io") {
-    for (const auto &[name, detail] : std::vector<std::pair<std::string, std::string>>{
-             {"out", "io::out — stdout output"},
-             {"err", "io::err — stderr output"},
-             {"in", "io::in — stdin input"}}) {
-      if (!matches_prefix(name)) continue;
+    for (const auto &[name, detail] :
+         std::vector<std::pair<std::string, std::string>>{{"out", "io::out — stdout output"},
+                                                          {"err", "io::err — stderr output"},
+                                                          {"in", "io::in — stdin input"}}) {
+      if (!matches_prefix(name))
+        continue;
       items.push_back(protocol::completion_item(name, 3, detail));
     }
   }
@@ -505,21 +542,24 @@ json::Array CompletionResolver::resolve_namespace_access(const std::string &ns_n
     for (const auto &[name, detail] : std::vector<std::pair<std::string, std::string>>{
              {"__read", "fs::__read(path) — read whole file as string, null on failure"},
              {"__write", "fs::__write(path, content) — write string to file"}}) {
-      if (!matches_prefix(name)) continue;
+      if (!matches_prefix(name))
+        continue;
       items.push_back(protocol::completion_item(name, 3, detail));
     }
   }
   if (ns_name == "sys") {
     for (const auto &[name, detail] : std::vector<std::pair<std::string, std::string>>{
              {"args", "sys::args() — command-line arguments as string[]"}}) {
-      if (!matches_prefix(name)) continue;
+      if (!matches_prefix(name))
+        continue;
       items.push_back(protocol::completion_item(name, 3, detail));
     }
   }
   auto it = analysis_.imported_symbols.find(ns_name);
   if (it != analysis_.imported_symbols.end()) {
     for (const auto &sym : it->second) {
-      if (!matches_prefix(sym.name)) continue;
+      if (!matches_prefix(sym.name))
+        continue;
       int kind = (sym.kind == SymbolKind::Function) ? 3 : 6;
       items.push_back(protocol::completion_item(sym.name, kind, sym.type_name));
     }
@@ -530,14 +570,16 @@ json::Array CompletionResolver::resolve_namespace_access(const std::string &ns_n
   for (const auto *sym : visible) {
     if (sym->kind == SymbolKind::Enum && sym->name == ns_name) {
       for (const auto &variant : sym->variants) {
-        if (!matches_prefix(variant)) continue;
+        if (!matches_prefix(variant))
+          continue;
         items.push_back(protocol::completion_item(variant, 20, ns_name + " variant"));
       }
       break;
     }
     if (sym->kind == SymbolKind::Concept && sym->name == ns_name) {
       for (const auto &method : sym->concept_methods) {
-        if (!matches_prefix(method.name)) continue;
+        if (!matches_prefix(method.name))
+          continue;
         items.push_back(protocol::completion_item(method.name, 2, method.type_name));
       }
       break;
@@ -549,11 +591,13 @@ json::Array CompletionResolver::resolve_namespace_access(const std::string &ns_n
 json::Array CompletionResolver::resolve_import_path() {
   json::Array items;
   const std::string file_path = uri_to_path(uri_);
-  if (file_path.empty()) return items;
+  if (file_path.empty())
+    return items;
   std::filesystem::path current_path(file_path);
   std::error_code ec;
   std::filesystem::path abs_path = std::filesystem::absolute(current_path, ec);
-  if (ec) abs_path = current_path;
+  if (ec)
+    abs_path = current_path;
   const std::string base_dir =
       abs_path.has_parent_path() ? abs_path.parent_path().string() : std::string(".");
 
@@ -564,7 +608,7 @@ json::Array CompletionResolver::resolve_import_path() {
   // *is* the file (its own `export module` decl), so the list isn't
   // polluted by no-op suggestions.
   std::set<std::string> already_imported(analysis_.imported_namespaces.begin(),
-                                          analysis_.imported_namespaces.end());
+                                         analysis_.imported_namespaces.end());
   for (const auto &ns : analysis_.opened_namespaces) {
     already_imported.insert(ns);
   }
@@ -584,9 +628,12 @@ json::Array CompletionResolver::resolve_import_path() {
     }
 
     for (const auto &[name, rel_path] : project->modules) {
-      if (name == self_module) continue;
-      if (already_imported.count(name)) continue;
-      if (!matches_prefix(name)) continue;
+      if (name == self_module)
+        continue;
+      if (already_imported.count(name))
+        continue;
+      if (!matches_prefix(name))
+        continue;
       // Emit textEdit explicitly so VS Code's client-side filter compares
       // the typed token (e.g. "ma") against the full label ("math") rather
       // than against characters typed since the trigger fired. Without
@@ -595,10 +642,10 @@ json::Array CompletionResolver::resolve_import_path() {
       // false. kind=9 (Module); detail surfaces the manifest path.
       const int start_char = character_ - static_cast<int>(prefix_.size());
       items.push_back(protocol::completion_item_with_edit(
-          name, /*kind=*/9, rel_path, line_,
-          start_char < 0 ? character_ : start_char, character_));
+          name, /*kind=*/9, rel_path, line_, start_char < 0 ? character_ : start_char, character_));
     }
-    if (!items.empty()) return items;
+    if (!items.empty())
+      return items;
   }
 
   // Fallback: no nest reachable, or nest reachable but produced no matches.
@@ -606,11 +653,15 @@ json::Array CompletionResolver::resolve_import_path() {
   // hasn't authored kinglet.nest yet still gets some help.
   const std::string current_name = abs_path.filename().string();
   for (const auto &entry : std::filesystem::directory_iterator(base_dir, ec)) {
-    if (!entry.is_regular_file()) continue;
+    if (!entry.is_regular_file())
+      continue;
     std::string filename = entry.path().filename().string();
-    if (filename.size() < 3 || filename.substr(filename.size() - 3) != ".kl") continue;
-    if (filename == current_name) continue;
-    if (!matches_prefix(filename)) continue;
+    if (filename.size() < 3 || filename.substr(filename.size() - 3) != ".kl")
+      continue;
+    if (filename == current_name)
+      continue;
+    if (!matches_prefix(filename))
+      continue;
     items.push_back(protocol::completion_item(filename, 17, entry.path().string()));
   }
   return items;
@@ -619,22 +670,27 @@ json::Array CompletionResolver::resolve_import_path() {
 json::Array CompletionResolver::resolve_import_symbol(const std::string &import_path) {
   json::Array items;
   const std::string file_path = uri_to_path(uri_);
-  if (file_path.empty()) return items;
+  if (file_path.empty())
+    return items;
   std::filesystem::path current_path(file_path);
   std::string base_dir = current_path.parent_path().string();
   ModuleLoader loader(base_dir);
   auto load_result = loader.load(import_path);
-  if (!load_result.module) return items;
+  if (!load_result.module)
+    return items;
   for (const auto *fn : load_result.module->public_functions) {
-    if (!matches_prefix(fn->name)) continue;
+    if (!matches_prefix(fn->name))
+      continue;
     items.push_back(protocol::completion_item(fn->name, 3, "function"));
   }
   for (const auto *st : load_result.module->public_structs) {
-    if (!matches_prefix(st->name)) continue;
+    if (!matches_prefix(st->name))
+      continue;
     items.push_back(protocol::completion_item(st->name, 22, "struct"));
   }
   for (const auto *en : load_result.module->public_enums) {
-    if (!matches_prefix(en->name)) continue;
+    if (!matches_prefix(en->name))
+      continue;
     items.push_back(protocol::completion_item(en->name, 13, "enum"));
   }
   return items;
@@ -651,12 +707,13 @@ json::Array CompletionResolver::resolve_using_namespace() {
   // Namespaces made available through imports. used_namespaces is intentionally
   // excluded: it is populated by `using` statements themselves (including the
   // partially-typed one being completed), which would echo back as noise.
-  for (const auto &ns : analysis_.imported_namespaces) names.insert(ns);
+  for (const auto &ns : analysis_.imported_namespaces)
+    names.insert(ns);
   for (const auto &name : names) {
-    if (name.empty() ||
-        !(std::isalpha(static_cast<unsigned char>(name[0])) || name[0] == '_'))
+    if (name.empty() || !(std::isalpha(static_cast<unsigned char>(name[0])) || name[0] == '_'))
       continue;
-    if (!matches_prefix(name)) continue;
+    if (!matches_prefix(name))
+      continue;
     items.push_back(protocol::completion_item(name, 9, "namespace"));
   }
   return items;
@@ -669,9 +726,9 @@ json::Array CompletionResolver::resolve_struct_literal(const std::string &struct
   for (const auto *sym : visible) {
     if (sym->kind == SymbolKind::Struct && sym->name == struct_name) {
       for (const auto &field : sym->fields) {
-        if (!matches_prefix(field.name)) continue;
-        items.push_back(protocol::completion_item(field.name, 5,
-                                                  "field — " + field.type_name));
+        if (!matches_prefix(field.name))
+          continue;
+        items.push_back(protocol::completion_item(field.name, 5, "field — " + field.type_name));
       }
       break;
     }
@@ -681,7 +738,8 @@ json::Array CompletionResolver::resolve_struct_literal(const std::string &struct
 
 json::Array CompletionResolver::resolve_enum_variant(const std::string &subject_name) {
   json::Array items;
-  if (subject_name.empty()) return items;
+  if (subject_name.empty())
+    return items;
 
   auto visible = analysis_.symbols.visible_at(line_ + 1);
 
@@ -704,21 +762,23 @@ json::Array CompletionResolver::resolve_enum_variant(const std::string &subject_
       break;
     }
   }
-  if (!enum_sym) return items;
+  if (!enum_sym)
+    return items;
 
   for (std::size_t vi = 0; vi < enum_sym->variants.size(); ++vi) {
     const auto &v = enum_sym->variants[vi];
-    if (!matches_prefix(v) && !matches_prefix(enum_sym->name)) continue;
+    if (!matches_prefix(v) && !matches_prefix(enum_sym->name))
+      continue;
 
     std::string label = enum_sym->name + "::" + v;
     std::string snippet = label;
-    int param_count = vi < enum_sym->variant_param_counts.size()
-                          ? enum_sym->variant_param_counts[vi]
-                          : 0;
+    int param_count =
+        vi < enum_sym->variant_param_counts.size() ? enum_sym->variant_param_counts[vi] : 0;
     if (param_count > 0) {
       snippet += "(";
       for (int pi = 0; pi < param_count; ++pi) {
-        if (pi > 0) snippet += ", ";
+        if (pi > 0)
+          snippet += ", ";
         snippet += "let ${" + std::to_string(pi + 1) + ":v" + std::to_string(pi) + "}";
       }
       snippet += ")";

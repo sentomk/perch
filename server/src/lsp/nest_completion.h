@@ -14,7 +14,7 @@ namespace kinglet::lsp {
 // `file_path` is the absolute path to the manifest (used to discover .kl
 // files for modules{}-completion). `text` is the live document text. `line`
 // and `character` are 0-based LSP positions.
-json::Array complete_nest(const std::string &file_path, const std::string &text,
-                          int line, int character);
+json::Array complete_nest(const std::string &file_path, const std::string &text, int line,
+                          int character);
 
 } // namespace kinglet::lsp

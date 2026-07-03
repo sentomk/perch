@@ -27,7 +27,7 @@ struct Symbol {
   std::vector<ast::Parameter> params;
   std::string return_type;
   std::vector<FieldSymbol> fields;
-  std::vector<FieldSymbol> concept_methods;  // concept's method name → return type
+  std::vector<FieldSymbol> concept_methods; // concept's method name → return type
   std::vector<std::string> variants;
   std::vector<int> variant_param_counts;
 };
