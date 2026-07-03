@@ -65,12 +65,15 @@ jobs:
         shell: pwsh
         run: ./scripts/setup-deps.ps1
 
-      - name: Build C++ server and rename for platform
+      - name: Build C++ server and stage for upload
         shell: bash
         run: |
           gn gen out/Default --args='is_debug=false'
           ninja -C out/Default kinglet-lsp
-          cp out/Default/kinglet-lsp${{ runner.os == 'Windows' && '.exe' || '' }} out/Default/${{ matrix.binary }}
+          # Rename macOS binary so artifact filenames don't collide on merge.
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            mv out/Default/kinglet-lsp out/Default/${{ matrix.binary }}
+          fi
 
       - name: Upload server binary
         uses: actions/upload-artifact@v4
