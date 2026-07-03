@@ -8,15 +8,27 @@ permissions:
   contents: write
 
 jobs:
-  package:
-    runs-on: ubuntu-latest
+  # ── build C++ server on all three platforms ──────────────────────────────────
+  build-server:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            binary: kinglet-lsp
+          - os: macos-latest
+            binary: kinglet-lsp-darwin
+          - os: windows-latest
+            binary: kinglet-lsp.exe
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Install build tools
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
           curl -fsSL -o /tmp/gn.zip \
@@ -25,24 +37,82 @@ jobs:
           sudo chmod +x /usr/local/bin/gn
           rm /tmp/gn.zip
 
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja
+          curl -fsSL -o /tmp/gn.zip \
+            https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/latest
+          sudo unzip -d /usr/local/bin /tmp/gn.zip gn
+          sudo chmod +x /usr/local/bin/gn
+          rm /tmp/gn.zip
+
+      - name: Install build tools (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y ninja --no-progress
+          Invoke-WebRequest -Uri "https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/latest" -OutFile "$env:RUNNER_TEMP\gn.zip"
+          Expand-Archive "$env:RUNNER_TEMP\gn.zip" -DestinationPath "$env:RUNNER_TEMP"
+          Add-Content $env:GITHUB_PATH "$env:RUNNER_TEMP"
+
+      - name: Setup bootstrap symlinks (Unix)
+        if: runner.os != 'Windows'
+        run: bash scripts/setup-deps.sh
+
+      - name: Setup bootstrap symlinks (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/setup-deps.ps1
+
+      - name: Build C++ server
+        shell: bash
+        run: |
+          gn gen out/Default --args='is_debug=false'
+          ninja -C out/Default kinglet-lsp
+
+      - name: Upload server binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.os }}
+          path: out/Default/kinglet-lsp${{ runner.os == 'Windows' && '.exe' || '' }}
+
+  # ── package VSIX with all three platform binaries ────────────────────────────
+  package:
+    needs: build-server
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
 
-      - name: Setup bootstrap symlinks
-        run: bash scripts/setup-deps.sh
+      - name: Download server binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: server-*
+          path: server-artifacts
+          merge-multiple: true
 
-      - name: Build C++ server
+      - name: Stage platform binaries
         run: |
-          gn gen out/Default --args='is_debug=false'
-          ninja -C out/Default kinglet-lsp
+          mkdir -p bin
+          # Linux
+          cp server-artifacts/kinglet-lsp bin/kinglet-lsp
+          chmod +x bin/kinglet-lsp
+          # macOS
+          cp server-artifacts/kinglet-lsp bin/kinglet-lsp-darwin
+          chmod +x bin/kinglet-lsp-darwin
+          # Windows (artifact name includes .exe from upload)
+          cp server-artifacts/kinglet-lsp.exe bin/kinglet-lsp.exe
 
       - name: Build VSIX
         run: |
           npm ci
           npm run compile
-          node scripts/stage-vsix.js
           npx vsce package
 
       - name: Read version
@@ -59,7 +129,7 @@ jobs:
           TAG="v${VERSION}"
           VSIX="perch-${VERSION}.vsix"
 
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
+          if git ls-remote --tags origin "$TAG" | grep -q .; then
             echo "Tag $TAG already exists — updating release assets"
             gh release upload "$TAG" "$VSIX" --clobber
           else
