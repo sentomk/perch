@@ -13,7 +13,7 @@ namespace {
 
 constexpr int kSeverityWarning = 2;
 
-const std::unordered_set<std::string> kKnownBlocks = {"modules", "targets", "build", "fmt"};
+const std::unordered_set<std::string> kKnownBlocks = {"modules", "target", "build", "fmt"};
 const std::unordered_set<std::string> kBuildKeys = {"default", "backend", "out", "cache"};
 const std::unordered_set<std::string> kFmtKeys = {"indent", "max_width", "newline",
                                                   "trailing_comma", "extensions"};
@@ -208,8 +208,8 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
 
   const auto lines = split_lines(text);
 
-  // First pass: collect modules { } and targets { } tables so we can
-  // cross-reference binary entries and build.default in the second pass.
+  // First pass: collect modules { } entries and target <name> { } blocks so we
+  // can cross-reference build.default in the second pass.
   std::unordered_map<std::string, int> modules;              // name -> declared line
   std::unordered_map<std::string, std::string> module_paths; // name -> rel path
   std::unordered_set<std::string> targets;                   // declared target names
@@ -218,10 +218,11 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
   // We track block context across lines via a simple state machine.
   // current_block:
   //   ""        - top level
-  //   "modules" | "targets" | "build" | "fmt"
+  //   "modules" | "target" | "build" | "fmt"
   //   "?<name>" - unknown block (still skip its body for diag purposes)
   std::string block;
   int block_open_line = 0;
+  std::string current_target_name; // name from "target <name> {"
 
   // Per-block duplicate-key tracking.
   std::unordered_set<std::string> block_keys;
@@ -237,6 +238,7 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
     // Block-close marker (alone on a line) ends the block.
     if (raw == "}") {
       block.clear();
+      current_target_name.clear();
       block_keys.clear();
       continue;
     }
@@ -255,12 +257,17 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
         }
         if (!kKnownBlocks.count(header)) {
           push_diag(out, lv.line, tokens.front().col, static_cast<int>(header.size()),
-                    "unknown block '" + header + "'; expected modules, targets, build, or fmt",
+                    "unknown block '" + header + "'; expected modules, target, build, or fmt",
                     kSeverityWarning);
         }
         block = kKnownBlocks.count(header) ? header : "?" + header;
         block_open_line = lv.line;
         block_keys.clear();
+        // For "target <name> {" blocks, record the target name.
+        if (header == "target" && tokens.size() >= 3 && tokens[2].text == "{") {
+          current_target_name = tokens[1].text;
+          targets.insert(current_target_name);
+        }
         continue;
       }
       // Top-level `project` line.
@@ -299,7 +306,7 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
       // Keep the latter declaration for downstream checks.
     }
 
-    if (block == "modules" || block == "targets") {
+    if (block == "modules") {
       // Module/target name validity — must look like a dotted identifier.
       bool legal = !key.text.empty() &&
                    (std::isalpha(static_cast<unsigned char>(key.text[0])) || key.text[0] == '_');
@@ -422,26 +429,25 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
       continue;
     }
 
-    if (block == "targets") {
-      // Right-hand side is either `binary "name"` or `library`.
-      const std::string &t0 = tokens[2].text;
-      if (t0 == "binary") {
-        targets.insert(key.text);
-        if (tokens.size() < 4 || tokens[3].text.empty() || tokens[3].text.front() != '"') {
+    if (block == "target") {
+      // target <name> { kind = "binary" / "library" / "test" / "object"
+      //                sources = [...]
+      //                deps = [...] }
+      const std::string &k = key.text;
+      if (k == "kind") {
+        const std::string v =
+            tokens[2].text.front() == '"' ? unquote(tokens[2].text) : tokens[2].text;
+        if (v != "binary" && v != "library" && v != "test" && v != "object") {
           push_diag(out, lv.line, tokens[2].col, static_cast<int>(tokens[2].text.size()),
-                    "binary target requires a quoted entry module name, e.g. binary \"app\"",
+                    "unknown target kind '" + v + "'; expected binary, library, test, or object",
                     kSeverityWarning);
-        } else {
-          const std::string mod = unquote(tokens[3].text);
-          // Cross-check deferred to second pass.
-          (void)mod;
         }
-      } else if (t0 == "library") {
-        targets.insert(key.text);
-        // OK.
+      } else if (k == "sources" || k == "deps") {
+        // sources / deps: accept any value (string list in brackets or bare).
       } else {
-        push_diag(out, lv.line, tokens[2].col, static_cast<int>(t0.size()),
-                  "expected `binary \"name\"` or `library`", kSeverityWarning);
+        push_diag(out, lv.line, key.col, static_cast<int>(key.text.size()),
+                  "unknown target key '" + k + "'; expected kind, sources, or deps",
+                  kSeverityWarning);
       }
       continue;
     }
@@ -491,17 +497,7 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
         // build.default references a target, not a module.
         if (!name.empty() && !targets.count(name)) {
           push_diag(out, lv.line, tokens[2].col, static_cast<int>(tokens[2].text.size()),
-                    "build.default '" + name + "' is not declared in targets { ... }",
-                    kSeverityWarning);
-        }
-      }
-    } else if (block == "targets" && tokens.size() >= 4 && tokens[2].text == "binary") {
-      if (tokens[3].text.front() == '"') {
-        const std::string mod = unquote(tokens[3].text);
-        if (!mod.empty() && !modules.count(mod)) {
-          push_diag(out, lv.line, tokens[3].col, static_cast<int>(tokens[3].text.size()),
-                    "binary target references module '" + mod +
-                        "' which is not declared in modules { ... }",
+                    "build.default '" + name + "' is not declared in a target { ... } block",
                     kSeverityWarning);
         }
       }
