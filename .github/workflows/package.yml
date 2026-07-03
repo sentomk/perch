@@ -65,17 +65,18 @@ jobs:
         shell: pwsh
         run: ./scripts/setup-deps.ps1
 
-      - name: Build C++ server
+      - name: Build C++ server and rename for platform
         shell: bash
         run: |
           gn gen out/Default --args='is_debug=false'
           ninja -C out/Default kinglet-lsp
+          cp out/Default/kinglet-lsp${{ runner.os == 'Windows' && '.exe' || '' }} out/Default/${{ matrix.binary }}
 
       - name: Upload server binary
         uses: actions/upload-artifact@v4
         with:
           name: server-${{ matrix.os }}
-          path: out/Default/kinglet-lsp${{ runner.os == 'Windows' && '.exe' || '' }}
+          path: out/Default/${{ matrix.binary }}
 
   # ── package VSIX with all three platform binaries ────────────────────────────
   package:
@@ -100,13 +101,12 @@ jobs:
       - name: Stage platform binaries
         run: |
           mkdir -p bin
-          # Linux
+          ls -la server-artifacts/
+          # Each artifact has a unique filename (kinglet-lsp, kinglet-lsp-darwin, kinglet-lsp.exe)
           cp server-artifacts/kinglet-lsp bin/kinglet-lsp
           chmod +x bin/kinglet-lsp
-          # macOS
-          cp server-artifacts/kinglet-lsp bin/kinglet-lsp-darwin
+          cp server-artifacts/kinglet-lsp-darwin bin/kinglet-lsp-darwin
           chmod +x bin/kinglet-lsp-darwin
-          # Windows (artifact name includes .exe from upload)
           cp server-artifacts/kinglet-lsp.exe bin/kinglet-lsp.exe
 
       - name: Build VSIX
