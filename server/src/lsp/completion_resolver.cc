@@ -613,40 +613,10 @@ json::Array CompletionResolver::resolve_import_path() {
     already_imported.insert(ns);
   }
 
-  if (const auto project = kinglet::find_project_config(base_dir)) {
-    // Identify which module (if any) corresponds to this source file, so we
-    // don't suggest importing yourself.
-    std::string self_module;
-    const std::filesystem::path self_canon = std::filesystem::weakly_canonical(abs_path, ec);
-    for (const auto &[name, rel_path] : project->modules) {
-      const std::filesystem::path mod_canon = std::filesystem::weakly_canonical(
-          std::filesystem::path(project->root_dir) / rel_path, ec);
-      if (!ec && mod_canon == self_canon) {
-        self_module = name;
-        break;
-      }
-    }
-
-    for (const auto &[name, rel_path] : project->modules) {
-      if (name == self_module)
-        continue;
-      if (already_imported.count(name))
-        continue;
-      if (!matches_prefix(name))
-        continue;
-      // Emit textEdit explicitly so VS Code's client-side filter compares
-      // the typed token (e.g. "ma") against the full label ("math") rather
-      // than against characters typed since the trigger fired. Without
-      // textEdit, character-triggered completion can silently filter out
-      // perfectly valid matches when label.startsWith(trigger_char) is
-      // false. kind=9 (Module); detail surfaces the manifest path.
-      const int start_char = character_ - static_cast<int>(prefix_.size());
-      items.push_back(protocol::completion_item_with_edit(
-          name, /*kind=*/9, rel_path, line_, start_char < 0 ? character_ : start_char, character_));
-    }
-    if (!items.empty())
-      return items;
-  }
+  // The new target-based manifest (kinglet.nest v2) doesn't have a flat
+  // name→file module map. Fall through to the file-based completion below
+  // which offers sibling .kl files — sufficient for import path completion
+  // in most projects.
 
   // Fallback: no nest reachable, or nest reachable but produced no matches.
   // Offer sibling .kl files as a last resort so a brand-new project that

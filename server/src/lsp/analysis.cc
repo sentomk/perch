@@ -235,16 +235,17 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
   if (module_loader && parse_result.program) {
     // Populate result.imported_symbols[ns] from a freshly-loaded module.
     // Filters honor selected_symbols when supplied (legacy form only).
-    auto ingest = [&](const ModuleLoader::LoadResult &load_result, const ast::Decl &decl_for_loc,
-                      const std::string &ns, const std::vector<std::string> &selected_symbols) {
-      if (!load_result.module) {
+    auto ingest = [&](const ParsedModule *mod, const ast::Decl &decl_for_loc, const std::string &ns,
+                      const std::vector<std::string> &selected_symbols,
+                      const std::string &error_msg = {}) {
+      if (!mod) {
         result.diagnostics.push_back(
-            {decl_for_loc.location.line, decl_for_loc.location.column, 1, load_result.error, 1});
+            {decl_for_loc.location.line, decl_for_loc.location.column, 1, error_msg, 1});
         return;
       }
-      const auto &mod = *load_result.module;
+      const auto &module_ref = *mod;
       auto &syms = result.imported_symbols[ns];
-      for (const auto *fn : mod.public_functions) {
+      for (const auto *fn : module_ref.public_functions) {
         if (!selected_symbols.empty()) {
           bool found = false;
           for (const auto &s : selected_symbols) {
@@ -264,7 +265,7 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         sym.location = decl_for_loc.location;
         syms.push_back(std::move(sym));
       }
-      for (const auto *sd : mod.public_structs) {
+      for (const auto *sd : module_ref.public_structs) {
         if (!selected_symbols.empty())
           continue;
         Symbol sym;
@@ -277,7 +278,7 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         }
         syms.push_back(std::move(sym));
       }
-      for (const auto *ed : mod.public_enums) {
+      for (const auto *ed : module_ref.public_enums) {
         if (!selected_symbols.empty())
           continue;
         Symbol sym;
@@ -301,13 +302,18 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
                 ? (load_result.module ? load_result.module->namespace_name
                                       : std::filesystem::path(imp->path).stem().string())
                 : imp->alias;
-        ingest(load_result, *imp, ns, imp->selected_symbols);
+        ingest(load_result.module, *imp, ns, imp->selected_symbols, load_result.error);
         continue;
       }
       if (const auto *imp = dynamic_cast<const ast::LogicalImportDecl *>(decl.get())) {
-        auto load_result = module_loader->load_by_logical_name(imp->module_id);
-        // The manifest key IS the namespace user wrote (`import math` -> `math::`).
-        ingest(load_result, *imp, imp->module_id, {});
+        auto resolve_result = module_loader->resolve_logical(imp->module_id);
+        if (!resolve_result.error.empty()) {
+          result.diagnostics.push_back(
+              {imp->location.line, imp->location.column, 1, resolve_result.error, 1});
+        }
+        for (const auto *mod : resolve_result.modules) {
+          ingest(mod, *imp, mod->namespace_name, {});
+        }
         continue;
       }
     }
