@@ -245,6 +245,10 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
       }
       const auto &module_ref = *mod;
       auto &syms = result.imported_symbols[ns];
+      // Use the real declaration's own location + the module's resolved
+      // file path — NOT decl_for_loc (the import statement) — so
+      // go-to-definition/hover land on the actual `pub` declaration in the
+      // defining file instead of bouncing back to the import line.
       for (const auto *fn : module_ref.public_functions) {
         if (!selected_symbols.empty()) {
           bool found = false;
@@ -262,7 +266,8 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         sym.kind = SymbolKind::Function;
         sym.return_type = fn->return_type.to_string();
         sym.params = fn->params;
-        sym.location = decl_for_loc.location;
+        sym.location = fn->location;
+        sym.file_path = module_ref.resolved_path;
         syms.push_back(std::move(sym));
       }
       for (const auto *sd : module_ref.public_structs) {
@@ -272,7 +277,8 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         sym.name = sd->name;
         sym.kind = SymbolKind::Struct;
         sym.type_name = "struct";
-        sym.location = decl_for_loc.location;
+        sym.location = sd->location;
+        sym.file_path = module_ref.resolved_path;
         for (const auto &field : sd->fields) {
           sym.fields.push_back(FieldSymbol{field.name, field.type.to_string()});
         }
@@ -285,7 +291,8 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
         sym.name = ed->name;
         sym.kind = SymbolKind::Enum;
         sym.type_name = "enum";
-        sym.location = decl_for_loc.location;
+        sym.location = ed->location;
+        sym.file_path = module_ref.resolved_path;
         for (const auto &v : ed->variants) {
           sym.variants.push_back(v.name);
           sym.variant_param_counts.push_back(static_cast<int>(v.param_types.size()));

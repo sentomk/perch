@@ -1,0 +1,9 @@
+export module app;
+
+import math;
+using io;
+
+int main() {
+  io::out.line("{}", math::square(4));
+  return 0;
+}

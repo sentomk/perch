@@ -685,7 +685,11 @@ json::Value Server::handle_definition(const json::Value &params) {
   if (!sym)
     return json::Value::null();
 
-  return protocol::location(uri, sym->location.line, sym->location.column);
+  // Imported symbols carry the resolved path of the file that actually
+  // declares them. Fall back to the current document's URI for symbols
+  // declared locally (file_path empty).
+  const std::string target_uri = sym->file_path.empty() ? uri : path_to_uri(sym->file_path);
+  return protocol::location(target_uri, sym->location.line, sym->location.column);
 }
 
 json::Value Server::handle_hover(const json::Value &params) {

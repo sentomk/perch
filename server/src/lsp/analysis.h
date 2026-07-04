@@ -22,6 +22,13 @@ struct Symbol {
   SymbolKind kind;
   std::string type_name;
   ast::SourceLocation location;
+  // Absolute filesystem path of the file this symbol is actually declared
+  // in. Empty means "the file currently being analyzed" (the common case
+  // for locally-declared symbols). Imported symbols set this to the
+  // resolved path of the module that declares them, so go-to-definition
+  // and hover can point at the real declaration instead of the importing
+  // file's `import` statement.
+  std::string file_path;
   int scope_start_line = 0;
   int scope_end_line = 999999;
   std::vector<ast::Parameter> params;

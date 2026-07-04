@@ -1,0 +1,16 @@
+project "perch-definition-fixture" version "0.0.0"
+
+target math {
+  kind    = "library"
+  sources = ["lib/math.kl"]
+}
+
+target app {
+  kind    = "binary"
+  sources = ["app.kl"]
+  deps    = ["math"]
+}
+
+build {
+  default = "app"
+}
