@@ -1,19 +1,20 @@
 project "ok" version "0.1.0"
 
-modules {
-  a = "a.kl"
-  b = "lib/b.kl"
+target lib {
+  kind    = "library"
+  sources = ["lib/b.kl"]
 }
 
-targets {
-  app = binary "a"
-  lib = library
+target app {
+  kind    = "binary"
+  sources = ["a.kl"]
+  deps    = ["lib"]
 }
 
 build {
   default = "app"
   backend = native
-  out = ".kinglet/out"
+  out     = ".kinglet/out"
 }
 
 fmt {
