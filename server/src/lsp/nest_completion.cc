@@ -73,6 +73,12 @@ ParsedManifest parse_modules(const std::string &text) {
         auto rr = header.find_last_not_of(" \t");
         if (rr != std::string::npos)
           header.resize(rr + 1);
+        // Block keyword is only the FIRST word — headers like
+        // `target <name> {` carry a name after the keyword that must not
+        // be folded into the block identifier.
+        auto sp = header.find_first_of(" \t");
+        if (sp != std::string::npos)
+          header.resize(sp);
         opener = header;
       }
     }
@@ -211,6 +217,11 @@ std::string block_at(const std::string &text, int cursor_line) {
         auto rr = header.find_last_not_of(" \t");
         if (rr != std::string::npos)
           header.resize(rr + 1);
+        // Block keyword is only the FIRST word — `target <name> {` must
+        // resolve to block "target", not "target <name>".
+        auto sp = header.find_first_of(" \t");
+        if (sp != std::string::npos)
+          header.resize(sp);
         opener = header;
       }
     }
