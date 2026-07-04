@@ -1,5 +1,12 @@
 project "x" version "0.1.0"
-modules { app = "app.kl" }
-targets {
-  demo = binary "
+
+target math {
+  kind    = "library"
+  sources = ["math.kl"]
+}
+
+target app {
+  kind    = "binary"
+  sources = ["app.kl"]
+  deps    = ["
 }

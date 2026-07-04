@@ -603,24 +603,46 @@ json::Array CompletionResolver::resolve_import_path() {
 
   // Logical-name import is what `import` actually does today: the parser
   // wires `import math;` to a module id looked up in kinglet.nest. So the
-  // primary completion source is the project manifest's `modules { ... }`
-  // table. We hide modules the file already imports and the module that
-  // *is* the file (its own `export module` decl), so the list isn't
-  // polluted by no-op suggestions.
+  // primary completion source is the project's module index — every
+  // `export module <id>;` declared across every target's sources. We hide
+  // modules the file already imports and the module that *is* the file
+  // (its own `export module` decl), so the list isn't polluted by no-op
+  // suggestions.
   std::set<std::string> already_imported(analysis_.imported_namespaces.begin(),
                                          analysis_.imported_namespaces.end());
   for (const auto &ns : analysis_.opened_namespaces) {
     already_imported.insert(ns);
   }
+  std::string own_module_id;
+  if (analysis_.program) {
+    for (const auto &decl : analysis_.program->declarations) {
+      if (const auto *exported = dynamic_cast<const ast::ExportModuleDecl *>(decl.get())) {
+        own_module_id = exported->name;
+        break;
+      }
+    }
+  }
 
-  // The new target-based manifest (kinglet.nest v2) doesn't have a flat
-  // name→file module map. Fall through to the file-based completion below
-  // which offers sibling .kl files — sufficient for import path completion
-  // in most projects.
+  ModuleLoader loader(base_dir);
+  loader.discover_project_root(base_dir);
+  bool offered_any = false;
+  for (const auto &[module_id, source_path] : loader.module_index_entries()) {
+    if (module_id == own_module_id)
+      continue;
+    if (already_imported.count(module_id))
+      continue;
+    if (!matches_prefix(module_id))
+      continue;
+    items.push_back(protocol::completion_item(module_id, 9, source_path));
+    offered_any = true;
+  }
+  if (offered_any || loader.project_config().has_value())
+    return items;
 
-  // Fallback: no nest reachable, or nest reachable but produced no matches.
-  // Offer sibling .kl files as a last resort so a brand-new project that
-  // hasn't authored kinglet.nest yet still gets some help.
+  // Fallback: no kinglet.nest reachable at all. Offer sibling .kl files as a
+  // last resort so a brand-new project that hasn't authored a manifest yet
+  // still gets some help (these are file names, not module ids — the best
+  // available signal without a manifest to resolve against).
   const std::string current_name = abs_path.filename().string();
   for (const auto &entry : std::filesystem::directory_iterator(base_dir, ec)) {
     if (!entry.is_regular_file())

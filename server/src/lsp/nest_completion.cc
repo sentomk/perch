@@ -34,8 +34,12 @@ const std::vector<std::string> kFmtExtensions = {"align-imports", "group-using",
 const std::vector<std::string> kBlockHeaders = {"modules", "target", "build", "fmt"};
 
 struct ParsedManifest {
-  // module name -> rel path
+  // module name -> rel path (legacy `modules { }` block)
   std::map<std::string, std::string> modules;
+  // declared target names, in source order (from `target <name> { ... }`
+  // headers) — used to complete `build.default = "..."` and `deps = [...]`
+  // against the manifest format the current parser actually understands.
+  std::vector<std::string> targets;
 };
 
 // Tiny, forgiving re-parse of the live text. We don't reuse nest_analysis
@@ -65,6 +69,7 @@ ParsedManifest parse_modules(const std::string &text) {
 
     // Locate potential block opener on this line (only when at depth 0).
     std::string opener;
+    std::string opener_target_name; // set when opener == "target"
     if (block.empty()) {
       auto l = line.find_first_not_of(" \t");
       const auto brace_pos = line.find('{');
@@ -77,8 +82,16 @@ ParsedManifest parse_modules(const std::string &text) {
         // `target <name> {` carry a name after the keyword that must not
         // be folded into the block identifier.
         auto sp = header.find_first_of(" \t");
-        if (sp != std::string::npos)
+        if (sp != std::string::npos) {
+          std::string rest = header.substr(sp);
           header.resize(sp);
+          if (header == "target") {
+            auto rs = rest.find_first_not_of(" \t");
+            auto re = rest.find_last_not_of(" \t");
+            if (rs != std::string::npos)
+              opener_target_name = rest.substr(rs, re - rs + 1);
+          }
+        }
         opener = header;
       }
     }
@@ -153,6 +166,9 @@ ParsedManifest parse_modules(const std::string &text) {
           if (block == "modules") {
             entry_start = i + 1;
             collecting = true;
+          } else if (block == "target" && !opener_target_name.empty()) {
+            out.targets.push_back(opener_target_name);
+            opener_target_name.clear();
           }
         } else if (collecting) {
           // nested brace inside modules — shouldn't happen in well-formed
@@ -186,11 +202,12 @@ ParsedManifest parse_modules(const std::string &text) {
 // Lines after the cursor are not considered. We track braces char-by-char so
 // single-line forms like `modules { foo = "x.kl" }` correctly close on the
 // same line.
-std::string block_at(const std::string &text, int cursor_line) {
+std::string block_at(const std::string &text, int cursor_line, std::string *target_name = nullptr) {
   std::istringstream in(text);
   std::string line;
-  std::string block; // currently-open block name; empty at top level
-  int depth = 0;     // brace depth inside the currently-open block
+  std::string block;           // currently-open block name; empty at top level
+  std::string cur_target_name; // name of the currently-open target block, if any
+  int depth = 0;               // brace depth inside the currently-open block
   int lineno = 0;
   while (std::getline(in, line) && lineno < cursor_line) {
     ++lineno;
@@ -209,6 +226,7 @@ std::string block_at(const std::string &text, int cursor_line) {
     // Pull out the block name if this line opens one. We do this before the
     // char loop so we can attribute braces to that block.
     std::string opener;
+    std::string opener_target_name;
     if (block.empty()) {
       auto l = line.find_first_not_of(" \t");
       const auto brace = line.find('{');
@@ -220,8 +238,16 @@ std::string block_at(const std::string &text, int cursor_line) {
         // Block keyword is only the FIRST word — `target <name> {` must
         // resolve to block "target", not "target <name>".
         auto sp = header.find_first_of(" \t");
-        if (sp != std::string::npos)
+        if (sp != std::string::npos) {
+          std::string rest = header.substr(sp);
           header.resize(sp);
+          if (header == "target") {
+            auto rs = rest.find_first_not_of(" \t");
+            auto re = rest.find_last_not_of(" \t");
+            if (rs != std::string::npos)
+              opener_target_name = rest.substr(rs, re - rs + 1);
+          }
+        }
         opener = header;
       }
     }
@@ -237,16 +263,22 @@ std::string block_at(const std::string &text, int cursor_line) {
         if (depth == 0 && !opener.empty()) {
           block = opener;
           opener.clear();
+          cur_target_name = opener_target_name;
+          opener_target_name.clear();
         }
         ++depth;
       } else if (c == '}') {
         if (depth > 0)
           --depth;
-        if (depth == 0)
+        if (depth == 0) {
           block.clear();
+          cur_target_name.clear();
+        }
       }
     }
   }
+  if (target_name)
+    *target_name = cur_target_name;
   return block;
 }
 
@@ -350,7 +382,8 @@ json::Array complete_nest(const std::string &file_path, const std::string &text,
   // opening quote's interior to the cursor.
   const int str_start = character - static_cast<int>(in_str.size());
 
-  const std::string block = block_at(text, line);
+  std::string current_target_name;
+  const std::string block = block_at(text, line, &current_target_name);
   const ParsedManifest parsed = parse_modules(text);
 
   // ---------------------------------------------------------------- top level
@@ -441,7 +474,17 @@ json::Array complete_nest(const std::string &file_path, const std::string &text,
         offer(items, "object", kCompletionKindEnum, "object file target", word, line, word_start,
               character);
       }
-      // sources / deps — free-form, nothing to offer.
+      if (lhs == "deps") {
+        // deps lists other target names (`deps = ["math"]`). Offer every
+        // declared target except the one we're currently inside.
+        for (const auto &name : parsed.targets) {
+          if (name == current_target_name)
+            continue;
+          offer(items, name, kCompletionKindModule, "target dependency", in_str, line, str_start,
+                character);
+        }
+      }
+      // sources — free-form file/directory paths, nothing to offer.
       return items;
     }
     // LHS — offer known keys.
@@ -469,9 +512,21 @@ json::Array complete_nest(const std::string &file_path, const std::string &text,
 
       if (lhs == "default") {
         if (string_ctx) {
-          for (const auto &[name, _] : parsed.modules) {
-            offer(items, name, kCompletionKindModule, "module entry point", in_str, line, str_start,
-                  character);
+          // build.default references a *target* name (validated against
+          // `target { ... }` blocks by nest_analysis.cc), not a module.
+          // Fall back to the legacy modules table only when no `target`
+          // blocks are declared at all, so old-format manifests still get
+          // some completion.
+          if (!parsed.targets.empty()) {
+            for (const auto &name : parsed.targets) {
+              offer(items, name, kCompletionKindModule, "build target", in_str, line, str_start,
+                    character);
+            }
+          } else {
+            for (const auto &[name, _] : parsed.modules) {
+              offer(items, name, kCompletionKindModule, "module entry point", in_str, line,
+                    str_start, character);
+            }
           }
         } else {
           // Help the user open the quotes.

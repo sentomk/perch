@@ -1,8 +1,8 @@
 {
   "required": [
-    "module file 'lib/math.kl' does not exist",
-    "duplicate key 'math'",
-    "binary target references module 'app'",
+    "duplicate key 'kind'",
+    "unknown target kind 'unicycle'",
+    "unknown target key 'extra'",
     "build.default 'ghost' is not declared",
     "unknown build key 'banana'",
     "unknown fmt extension 'no-such-extension'"

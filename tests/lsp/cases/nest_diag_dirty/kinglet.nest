@@ -1,18 +1,14 @@
 project "x" version "0.1.0"
 
-modules {
-  math = "lib/math.kl"
-  math = "lib/math2.kl"
-}
-
-targets {
-  demo = binary "app"
-  m    = library
+target app {
+  kind    = "unicycle"
+  kind    = "binary"
+  sources = ["app.kl"]
+  extra   = "nope"
 }
 
 build {
   default = "ghost"
-  backend = native
   banana  = "oops"
 }
 
