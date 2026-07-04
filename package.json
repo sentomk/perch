@@ -50,6 +50,9 @@
         "filenames": [
           "kinglet.nest"
         ],
+        "extensions": [
+          ".nest"
+        ],
         "configuration": "./nest-language-configuration.json",
         "icon": {
           "light": "./image/icons/icon-nest.svg",
@@ -84,6 +87,7 @@
     "configurationDefaults": {
       "files.associations": {
         "*.kl": "kinglet",
+        "*.nest": "kinglet-nest",
         "kinglet.nest": "kinglet-nest"
       },
       "[kinglet]": {
