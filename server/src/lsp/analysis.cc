@@ -363,6 +363,12 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
       result.symbols = collector.take();
       register_imported_symbols();
       register_selective_bare_names(*parse_result.program);
+      // Keep the partial program around even with parse errors — completion
+      // (e.g. import-path resolution needing this file's own `export
+      // module` id) runs against whatever parsed successfully before the
+      // error, and an incomplete trailing statement (the common case while
+      // the user is mid-edit) shouldn't erase everything that came before it.
+      result.program = std::move(parse_result.program);
     }
     return result;
   }

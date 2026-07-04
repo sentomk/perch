@@ -1,17 +1,16 @@
 project "perch-nest-walkup-fixture" version "0.0.0"
 
-modules {
-  math = "lib/core/math.kl"
-  util = "lib/fmt/util.kl"
+target math {
+  kind    = "library"
+  sources = ["lib/core/math.kl"]
 }
 
-targets {
-  math = library
-  util = library
+target util {
+  kind    = "library"
+  sources = ["lib/fmt/util.kl"]
+  deps    = ["math"]
 }
 
 build {
   default = "util"
-  backend = native
-  out     = ".kinglet/out"
 }
