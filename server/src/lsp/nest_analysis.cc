@@ -227,6 +227,12 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
   // Per-block duplicate-key tracking.
   std::unordered_set<std::string> block_keys;
 
+  // When the parser enters a multi-line array value (e.g. `sources = [\n`
+  // ... `]`), subsequent lines inside the array are just quoted strings
+  // (optionally comma-terminated), not `key = value` entries. We track
+  // this so the block-body parser below doesn't flag them as malformed.
+  bool in_block_array = false;
+
   for (const auto &lv : lines) {
     std::string raw = strip_comment(lv.text);
     int col = lv.start_col;
@@ -240,12 +246,21 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
       block.clear();
       current_target_name.clear();
       block_keys.clear();
+      in_block_array = false;
       continue;
     }
 
     auto tokens = tokenize_line(raw, col);
-    if (tokens.empty())
+    if (tokens.empty()) {
+      // A `]` (or `],`) on its own line is not tokenized ("]" is not an
+      // operator token in the nest grammar), so the token array comes
+      // back empty. If we're inside a multi-line array, this empty line
+      // is the closing bracket — exit array mode.
+      if (in_block_array && raw.find(']') != std::string::npos) {
+        in_block_array = false;
+      }
       continue;
+    }
 
     // Block headers like `modules {` or `fmt {`.
     if (block.empty()) {
@@ -290,8 +305,40 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
       continue;
     }
 
+    // Inside a block body.
+    // If we're currently inside a multi-line array value (e.g. the lines
+    // after `sources = [`), skip key=value validation — the tokens are just
+    // quoted strings and commas, not structured entries.
+    if (in_block_array) {
+      // Look for the closing bracket (possibly with a trailing comma).
+      if (raw.find(']') != std::string::npos) {
+        in_block_array = false;
+      }
+      continue;
+    }
+
     // Block body: lines look like `key = value [value ...]`.
     if (tokens.size() < 3 || tokens[1].text != "=") {
+      // Try to detect a multi-line array continuation — a lone quoted
+      // string or comma-terminated value that belongs to the array opened
+      // by the previous line's `key = [`.
+      bool looks_like_array_entry = false;
+      for (const auto &t : tokens) {
+        if (t.text.size() >= 2 && t.text.front() == '"') {
+          looks_like_array_entry = true;
+          break;
+        }
+        if (t.text == "," || t.text == "]" || t.text == "],") {
+          looks_like_array_entry = true;
+          break;
+        }
+      }
+      if (looks_like_array_entry) {
+        if (raw.find(']') != std::string::npos) {
+          // Closing bracket on this line — exit array mode.
+        }
+        continue;
+      }
       push_diag(out, lv.line, tokens.front().col, static_cast<int>(tokens.front().text.size()),
                 "expected `key = value` inside " + block + " { ... }", kSeverityWarning);
       continue;
@@ -299,6 +346,18 @@ AnalysisResult analyze_nest(const std::string &file_path, const std::string &tex
     const Token &key = tokens[0];
     const Token &eq = tokens[1];
     (void)eq;
+
+    // Detect `key = [` (start of a multi-line array value).
+    if (tokens.size() >= 3) {
+      const std::string &rhs = tokens[2].text;
+      if (rhs.size() >= 2 && rhs.front() == '[' && rhs.back() == ']') {
+        // Single-line array ('key = [...]') — no special tracking needed.
+      } else if (rhs.front() == '[' && rhs.back() != ']') {
+        // Multi-line array: the value list spans across lines.
+        // Subsequent lines are just quoted strings / commas, not key=value.
+        in_block_array = true;
+      }
+    }
 
     if (!block_keys.insert(key.text).second) {
       push_diag(out, lv.line, key.col, static_cast<int>(key.text.size()),

@@ -248,8 +248,17 @@ json::Array CompletionResolver::resolve_top_level() {
       {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition"},
       {"concept", "concept ${1:Name} {\n\t$0\n}", "concept definition"},
       {"using", "using ${1:io};$0", "using declaration"},
-      {"import", "import \"${1:file.kl}\"$0", "import module"},
+      {"import", "import ${1:module};$0", "import module"},
+      {"export", "export module ${1:name};$0", "export module declaration"},
       {"main", "int main() {\n\t$0\n\treturn 0;\n}", "main function"},
+      // pub-prefixed variants of the declaration keywords.  These only
+      // appear when the user has already typed (a prefix of) "pub", and
+      // they match against the second word (e.g. "struct" inside
+      // "pub struct") so the filter isn't overly eager.
+      {"pub fn", "pub int ${1:name}(${2:params}) {\n\t$0\n}", "public function"},
+      {"pub struct", "pub struct ${1:Name} {\n\t$0\n}", "public struct"},
+      {"pub enum", "pub enum ${1:Name} {\n\t$0\n}", "public enum"},
+      {"pub concept", "pub concept ${1:Name} {\n\t$0\n}", "public concept"},
   };
   for (const auto &s : snippets) {
     if (!matches_prefix(s.label))
@@ -626,14 +635,36 @@ json::Array CompletionResolver::resolve_import_path() {
   ModuleLoader loader(base_dir);
   loader.discover_project_root(base_dir);
   bool offered_any = false;
+  // Collect group-import prefixes (e.g. "math" from "math.basic") so the
+  // user can choose either the exact module or a group import that pulls
+  // in everything under that prefix.  Duplicates between exact and group
+  // entries are fine — the client de-duplicates by label.
+  std::set<std::string> group_prefixes;
   for (const auto &[module_id, source_path] : loader.module_index_entries()) {
     if (module_id == own_module_id)
       continue;
     if (already_imported.count(module_id))
       continue;
+    auto dot = module_id.find('.');
+    if (dot != std::string::npos) {
+      const std::string prefix = module_id.substr(0, dot);
+      if (!already_imported.count(prefix) && prefix != own_module_id) {
+        group_prefixes.insert(prefix);
+      }
+    }
     if (!matches_prefix(module_id))
       continue;
     items.push_back(protocol::completion_item(module_id, 9, source_path));
+    offered_any = true;
+  }
+  // Add group-import prefixes.  Skip any that were already offered as an
+  // exact module above (e.g. if there is a bare `math` module *and*
+  // `math.basic`, the exact-match entry takes precedence; the prefix
+  // entry is redundant here but the client handles duplicates fine).
+  for (const std::string &prefix : group_prefixes) {
+    if (!matches_prefix(prefix))
+      continue;
+    items.push_back(protocol::completion_item(prefix, 9, "group-import: all " + prefix + ".*"));
     offered_any = true;
   }
   if (offered_any || loader.project_config().has_value())
@@ -667,9 +698,29 @@ json::Array CompletionResolver::resolve_import_symbol(const std::string &import_
   std::filesystem::path current_path(file_path);
   std::string base_dir = current_path.parent_path().string();
   ModuleLoader loader(base_dir);
-  auto load_result = loader.load(import_path);
-  if (!load_result.module)
+  loader.discover_project_root(base_dir);
+
+  // Step 1 — sub-module completion: `import math.` where `math` might be
+  // either a prefix of one or more modules (e.g. `math.basic`) or an exact
+  // module itself.  When the cursor is after a dot, the user wants to see
+  // the next segment of the module path, not the public symbols of the
+  // module already typed — so sub-modules take priority over exact match.
+  std::string prefix = import_path + ".";
+  for (const auto &[module_id, source_path] : loader.module_index_entries()) {
+    if (!module_id.starts_with(prefix))
+      continue;
+    std::string suffix = module_id.substr(prefix.size());
+    if (!matches_prefix(suffix))
+      continue;
+    items.push_back(protocol::completion_item(suffix, 9, source_path));
+  }
+  if (!items.empty())
     return items;
+
+  // Step 2 — exact match: `import foo█` (without a dot) where `foo` is a
+  // complete module id.  Return the module's public symbols.
+  auto load_result = loader.load(import_path);
+
   for (const auto *fn : load_result.module->public_functions) {
     if (!matches_prefix(fn->name))
       continue;

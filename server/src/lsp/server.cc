@@ -1036,9 +1036,13 @@ json::Value Server::handle_formatting(const json::Value &params) {
     return json::Value(json::Array{});
   }
   if (!result.error.empty()) {
-    json::Object err;
-    err["error"] = json::Value::string(result.error);
-    return json::Value(err);
+    // Source-with-errors is the normal editing state inside an IDE — the
+    // user typed half a line and hasn't finished yet. A parse error here
+    // is expected, not a server error. Return the original text unchanged
+    // so the formatting gesture is a no-op (matching the CLI's `kinglet
+    // fmt --check` exit-non-zero-without-touching-files behaviour) instead
+    // of surfacing a red error popup on every keystroke.
+    return json::Value(json::Array{});
   }
 
   return make_formatting_edits(doc->text, result.formatted);
