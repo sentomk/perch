@@ -73,6 +73,21 @@ void test_format_project_config(const std::filesystem::path &cases) {
   CHECK(result.formatted == expected);
 }
 
+void test_format_nest_manifest_is_noop() {
+  // kinglet.nest uses a completely different grammar than .kl source.
+  // Regression for: formatting a .nest file used to run it through the .kl
+  // expression parser and surface a misleading "Expected ';' after
+  // expression" parse error instead of leaving the document untouched.
+  const std::string nest_source = "project \"kinglet-app\" version \"0.1.0\"\n\n"
+                                  "target app {\n}\n\n"
+                                  "build {\n  default = \"app\"\n}\n";
+  const kinglet::lsp::FormatDocumentResult result =
+      kinglet::lsp::format_document_text("/tmp/kinglet.nest", nest_source);
+  CHECK(!result.formattable);
+  CHECK(result.error.empty());
+  CHECK(result.formatted.empty());
+}
+
 void test_make_formatting_edits() {
   const std::string original = "int x=1;\n";
   const std::string formatted = "int x = 1;\n";
@@ -91,6 +106,7 @@ int main(int argc, char **argv) {
   test_format_basic_spacing(cases);
   test_format_parse_error(cases);
   test_format_project_config(cases);
+  test_format_nest_manifest_is_noop();
   test_make_formatting_edits();
 
   if (failures == 0) {

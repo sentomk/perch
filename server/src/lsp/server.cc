@@ -1029,6 +1029,12 @@ json::Value Server::handle_formatting(const json::Value &params) {
 
   const std::string file_path = uri_to_path(uri);
   const FormatDocumentResult result = format_document_text(file_path, doc->text);
+  if (!result.formattable) {
+    // Non-.kl document (e.g. kinglet.nest) — format_document_text() feeds
+    // the .kl expression parser and would misreport a parse error on any
+    // grammar it doesn't recognize. Nothing to format, nothing to edit.
+    return json::Value(json::Array{});
+  }
   if (!result.error.empty()) {
     json::Object err;
     err["error"] = json::Value::string(result.error);

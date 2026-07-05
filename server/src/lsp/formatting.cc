@@ -30,6 +30,17 @@ kinglet::preen::FmtConfig resolve_fmt_config(const std::string &file_path) {
 
 FormatDocumentResult format_document_text(const std::string &file_path, std::string_view source) {
   FormatDocumentResult out;
+  // format_string()/Parser only understand .kl expression-language syntax.
+  // kinglet.nest manifests (and any other non-.kl document a client might
+  // ask to format) use a different, hand-rolled grammar entirely — running
+  // them through the .kl parser produces a misleading "Expected ';' after
+  // expression"-style error instead of a clean no-op. The CLI's `kinglet
+  // fmt` already restricts itself to .kl files (cmd_fmt.cc's
+  // collect_kl_files); mirror that restriction here.
+  if (std::filesystem::path(file_path).extension() != ".kl") {
+    out.formattable = false;
+    return out;
+  }
   const auto config = resolve_fmt_config(file_path);
   const kinglet::preen::FormatResult result = kinglet::preen::format_string(source, config);
   if (!result.error.empty()) {
